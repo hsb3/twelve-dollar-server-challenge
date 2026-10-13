@@ -17,6 +17,8 @@ services:
     mem_limit: ${SERVER_MEMORY:-2g}
     memswap_limit: ${SERVER_MEMORY:-2g}
     ulimits: { nofile: { soft: 65535, hard: 65535 } }
+    # Docker's default filter blocks io_uring; the droplet doesn't. SERVER_SECCOMP=unconfined lifts it.
+    security_opt: [ "seccomp=${SERVER_SECCOMP:-builtin}" ]
     networks: [ bench ]
 
   tools:

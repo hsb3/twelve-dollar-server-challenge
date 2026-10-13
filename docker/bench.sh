@@ -6,7 +6,7 @@
 #   bash docker/bench.sh <submission-folder> [VUS]
 #
 # Env: SCENARIO (load = bench/load.js, or a name from bench/scenarios/), NGINX=1, DURATION, RAMP_UP,
-#      SERVER_CPUS, SERVER_MEMORY, SERVER_CPUSET, SERVER_PLATFORM, SKIP_TEST=1, plus each scenario's own env.
+#      SERVER_CPUS, SERVER_MEMORY, SERVER_CPUSET, SERVER_PLATFORM, SERVER_SECCOMP, SKIP_TEST=1, plus each scenario's own env.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export SUBMISSION="$(basename "${1:?usage: docker/bench.sh <submission-folder> [VUS]}")"
@@ -48,7 +48,7 @@ STATS="$(dc run -d --rm stats sh -c "exec curl -sN --unix-socket /var/run/docker
 
 # Everything needed to re-run this exact run: the env that shaped it plus the command.
 envs=""
-for v in SCENARIO NGINX DURATION RAMP_UP SERVER_CPUS SERVER_MEMORY SERVER_CPUSET SERVER_PLATFORM \
+for v in SCENARIO NGINX DURATION RAMP_UP SERVER_CPUS SERVER_MEMORY SERVER_CPUSET SERVER_PLATFORM SERVER_SECCOMP \
          START STEP STEPS HOLD RAMP BASE PEAK JUMP RATE MIX MAX_VUS; do
   [ -n "${!v:-}" ] && envs="$envs$v=${!v} "
 done

@@ -32,6 +32,7 @@ exits with k6's status (non-zero when a threshold fails).
 | `SERVER_CPUSET` | `1` | Cores the server may use. It sets what `nproc` reports, so keep it at `SERVER_CPUS` cores |
 | `SERVER_MEMORY` | `2g` | Memory limit. Swap is set to the same value, so no swap |
 | `SERVER_PLATFORM` | native | `linux/amd64` builds and runs the server for x86_64. k6 stays native |
+| `SERVER_SECCOMP` | `builtin` | `unconfined` lifts Docker's syscall filter, which blocks io_uring (the droplet doesn't). Needed by io_uring submissions such as `rust-epoll-scooter1337` |
 | `SKIP_TEST` | `0` | `1` skips the test suite |
 | `BENCH_SUBNET`, `GRAFANA_PORT` | `10.212.12.0/24`, `3000` | Change them if they clash with something on your machine |
 
