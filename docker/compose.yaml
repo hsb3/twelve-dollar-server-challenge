@@ -1,0 +1,88 @@
+# Isolated benchmark stack. Run it through docker/bench.sh; see docker/README.md.
+name: twelve-dollar
+
+services:
+  server:
+    image: twelve-dollar-server:${SUBMISSION:-unset}
+    platform: ${SERVER_PLATFORM:-}
+    build:
+      context: ..
+      dockerfile: docker/server.Dockerfile
+      args: { SUBMISSION: "${SUBMISSION:-}" }
+    environment: { BEHIND_NGINX: "${NGINX:-0}" }  # not NGINX: nginx reads that var itself
+    volumes: [ "../seed:/seed:ro" ]
+    # The $12 droplet: 1 vCPU, 2 GB, no swap. cpuset makes nproc report the box's CPU count too.
+    cpus: ${SERVER_CPUS:-1}
+    cpuset: "${SERVER_CPUSET:-1}"
+    mem_limit: ${SERVER_MEMORY:-2g}
+    memswap_limit: ${SERVER_MEMORY:-2g}
+    ulimits: { nofile: { soft: 65535, hard: 65535 } }
+    # Docker's default filter blocks io_uring; the droplet doesn't. SERVER_SECCOMP=unconfined lifts it;
+    # bench.sh takes it from the submission's security review.
+    security_opt: [ "seccomp=${SERVER_SECCOMP:-builtin}", "no-new-privileges:true" ]
+    networks: [ bench ]
+
+  tools:
+    build: { context: ., dockerfile: tools.Dockerfile }
+    image: twelve-dollar-tools
+    volumes: [ "..:/repo" ]
+    networks: [ bench ]
+    profiles: [ tools ]
+
+  k6:
+    image: grafana/k6:2.3.0
+    user: root   # writes results/ through a bind mount, which the image's own user can't on Linux hosts
+    volumes: [ "../bench:/bench:ro", "../seed:/seed:ro", "../results:/results" ]
+    environment:
+      - BASE_URL=http://server
+      - TOKENS=/seed/tokens.json
+      - VUS=${VUS:-100}
+      - DURATION=${DURATION:-5m}
+      - RAMP_UP=${RAMP_UP:-60s}
+      # scenario knobs, passed through only when set (bench/scenarios/*.js)
+      - START
+      - STEP
+      - STEPS
+      - HOLD
+      - RAMP
+      - BASE
+      - PEAK
+      - JUMP
+      - RATE
+      - MIX
+      - MAX_VUS
+    ulimits: { nofile: { soft: 65535, hard: 65535 } }
+    # Each VU holds its own connection to one server address; the default range caps that at ~28k.
+    sysctls: { net.ipv4.ip_local_port_range: "1024 65535" }
+    networks: [ bench ]
+    profiles: [ tools ]
+    command: [ "run", "--quiet", "/bench/load.js" ]
+
+  # Streams the server container's CPU and memory from the Docker API, about once a second.
+  stats:
+    image: twelve-dollar-tools
+    volumes: [ "..:/repo", "/var/run/docker.sock:/var/run/docker.sock" ]
+    network_mode: none
+    profiles: [ tools ]
+
+  grafana:
+    image: grafana/grafana:13.2.4
+    ports: [ "127.0.0.1:${GRAFANA_PORT:-3000}:3000" ]
+    environment:
+      GF_PLUGINS_PREINSTALL_SYNC: frser-sqlite-datasource@4.0.6
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/bench-runs.json
+    volumes: [ "./grafana:/etc/grafana/provisioning:ro", "../results:/results:ro", "grafana-data:/var/lib/grafana" ]
+    networks: [ viz ]   # not bench: it needs the internet for its plugin and a published port
+    profiles: [ viz ]
+
+volumes:
+  grafana-data: {}
+
+# Subnets are explicit so this works when Docker's default address pools are used up.
+networks:
+  bench:
+    internal: true   # the sandbox: no internet, LAN or host access. Image builds don't use this network.
+    ipam: { config: [ { subnet: "${BENCH_SUBNET:-10.212.12.0/24}" } ] }
+  viz:
+    ipam: { config: [ { subnet: "${VIZ_SUBNET:-10.212.13.0/24}" } ] }
