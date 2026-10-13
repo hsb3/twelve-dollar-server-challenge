@@ -69,7 +69,19 @@ limit. Each 10k run was about 374k requests, roughly 1k req/s at the hold.
    - **D:** combine `rate.js` at the equivalent request rate (about 5.1k req/s for 50k users) with a
      holder for 50k idle keep-alive connections. Cheap, but only an approximation.
 
-   Before choosing C, measure k6's real per-VU floor with a sleep-only script, after the current runs.
+   **Calibration (2026-10-13).** A `stairs` run against Rust went 10k → 15k → 20k → 25k VUs, holding
+   each step for 45 s (about 5 min in all), with k6's memory sampled every couple of seconds. Grafana
+   was stopped, leaving about 10.7 GB free in the VM.
+   - **k6 memory.** k6 starts at 3.3 GB because `ramping-vus` initialises all 25k VUs up front, about
+     0.13 MB each. It climbed to 4.8 GB at 10k active, 6.1 GB at 15k, 6.8 GB at 20k and 8.1 GB at 25k,
+     and peaked at 8.6 GB during ramp-down. It keeps growing at a constant VU count (about 12-20 MB/s),
+     probably Go's lazy GC.
+   - **Ceiling.** In this VM that puts the practical limit at about 25k VUs for the stairs shape. A
+     full-length `load.js` hold (5 min at peak) at 25k would probably need more, so treat about 20-22k
+     as the safe ceiling without changes.
+   - **Untested lever.** `GOMEMLIMIT` in k6's environment should make Go's GC hold k6 under a set size.
+   - **Rust at 25k.** p95 0.45 ms, p99 1.06 ms, 0% failures, peak 11% of one core and 125 MB. It was
+     nowhere near its limit.
 2. **Upstream's scoring search** (warm-up, doubling, narrowing to 250, a 5-minute confirm hold) isn't
    automated. `stairs` approximates it in one run.
 3. **The `spike` scenario has never been run.**
