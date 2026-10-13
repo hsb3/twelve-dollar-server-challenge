@@ -52,6 +52,8 @@ services:
       - MIX
       - MAX_VUS
     ulimits: { nofile: { soft: 65535, hard: 65535 } }
+    # Each VU holds its own connection to one server address; the default range caps that at ~28k.
+    sysctls: { net.ipv4.ip_local_port_range: "1024 65535" }
     networks: [ bench ]
     profiles: [ tools ]
     command: [ "run", "--quiet", "/bench/load.js" ]
