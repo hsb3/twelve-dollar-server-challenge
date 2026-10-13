@@ -4,7 +4,7 @@
 DC := docker compose -f docker/compose.yaml
 VUS ?= 100
 
-.PHONY: help bench dashboard dashboard-stop ps down ingest seed reviews
+.PHONY: help bench dashboard dashboard-stop ps down ingest check-runs seed reviews
 
 help:  ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
@@ -28,6 +28,9 @@ down:  ## Stop and remove every stack container (results and images stay)
 
 ingest:  ## Rebuild results/runs.db from every saved run
 	$(DC) run --rm -T tools node --no-warnings docker/ingest.mjs results/*/
+
+check-runs:  ## Check every run in results/ has all its data files and complete samples
+	$(DC) run --rm -T tools node --no-warnings docker/ingest.mjs --check results/*/
 
 seed:  ## Build seed/feed.db and seed/tokens.json
 	$(DC) run --rm -T tools bash seed/make-seed.sh

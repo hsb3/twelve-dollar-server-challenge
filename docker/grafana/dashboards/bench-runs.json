@@ -47,7 +47,7 @@
         "x": 0,
         "y": 0,
         "w": 12,
-        "h": 8
+        "h": 10
       },
       "targets": [
         {
@@ -80,8 +80,12 @@
       "options": {
         "legend": {
           "showLegend": true,
-          "displayMode": "list",
-          "placement": "bottom"
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
         },
         "tooltip": {
           "mode": "multi",
@@ -101,7 +105,7 @@
         "x": 12,
         "y": 0,
         "w": 12,
-        "h": 8
+        "h": 10
       },
       "targets": [
         {
@@ -134,8 +138,12 @@
       "options": {
         "legend": {
           "showLegend": true,
-          "displayMode": "list",
-          "placement": "bottom"
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
         },
         "tooltip": {
           "mode": "multi",
@@ -153,9 +161,9 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 8,
+        "y": 10,
         "w": 12,
-        "h": 8
+        "h": 10
       },
       "targets": [
         {
@@ -204,8 +212,12 @@
       "options": {
         "legend": {
           "showLegend": true,
-          "displayMode": "list",
-          "placement": "bottom"
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
         },
         "tooltip": {
           "mode": "multi",
@@ -223,9 +235,9 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 8,
+        "y": 10,
         "w": 12,
-        "h": 8
+        "h": 10
       },
       "targets": [
         {
@@ -274,8 +286,12 @@
       "options": {
         "legend": {
           "showLegend": true,
-          "displayMode": "list",
-          "placement": "bottom"
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
         },
         "tooltip": {
           "mode": "multi",
@@ -293,9 +309,9 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 16,
+        "y": 20,
         "w": 12,
-        "h": 8
+        "h": 10
       },
       "targets": [
         {
@@ -345,8 +361,12 @@
       "options": {
         "legend": {
           "showLegend": true,
-          "displayMode": "list",
-          "placement": "bottom"
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
         },
         "tooltip": {
           "mode": "multi",
@@ -364,9 +384,9 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 16,
+        "y": 20,
         "w": 12,
-        "h": 8
+        "h": 10
       },
       "targets": [
         {
@@ -399,8 +419,12 @@
       "options": {
         "legend": {
           "showLegend": true,
-          "displayMode": "list",
-          "placement": "bottom"
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
         },
         "tooltip": {
           "mode": "multi",
@@ -418,9 +442,9 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 24,
+        "y": 30,
         "w": 12,
-        "h": 8
+        "h": 10
       },
       "targets": [
         {
@@ -454,8 +478,12 @@
       "options": {
         "legend": {
           "showLegend": true,
-          "displayMode": "list",
-          "placement": "bottom"
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
         },
         "tooltip": {
           "mode": "multi",
@@ -473,9 +501,9 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 24,
+        "y": 30,
         "w": 12,
-        "h": 8
+        "h": 10
       },
       "targets": [
         {
@@ -508,8 +536,12 @@
       "options": {
         "legend": {
           "showLegend": true,
-          "displayMode": "list",
-          "placement": "bottom"
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
         },
         "tooltip": {
           "mode": "multi",
@@ -527,7 +559,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 32,
+        "y": 40,
         "w": 24,
         "h": 12
       },

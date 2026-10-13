@@ -1,12 +1,28 @@
 // Folds bench runs into results/runs.db (what Grafana reads): one row per run, one row per run-second.
 // Re-ingesting a run replaces it, so `node docker/ingest.mjs results/*/` rebuilds the database.
+// A run missing a data file or with gaps in its samples is refused, never stored half-empty.
+// --check only audits: every run folder has its files and is in the database with full coverage.
 //
-//   node docker/ingest.mjs results/<run-id> [...]
-import { createReadStream, existsSync, readFileSync } from 'node:fs';
+//   node docker/ingest.mjs [--check] results/<run-id> [...]
+import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { createGunzip } from 'node:zlib';
 import { DatabaseSync } from 'node:sqlite';
-import { join, dirname } from 'node:path';
+import { join, dirname, basename } from 'node:path';
+
+const REQUIRED = ['meta.json', 'k6.csv.gz', 'server-stats.jsonl', 'k6-exit'];
+const MIN_COVERAGE = 0.9;   // share of the run's seconds that must have k6 samples and server stats
+const missingFiles = (dir) => REQUIRED.filter((f) => !existsSync(join(dir, f)) || statSync(join(dir, f)).size === 0);
+
+// From t = 0 (first k6 sample) to the last k6 second: how many seconds have k6 data and server stats.
+function coverage(db, runId) {
+  const c = db.prepare(`SELECT max(t) + 1 AS span, count(vus) AS k6, count(cpu_pct) AS stats
+    FROM samples WHERE run_id = ? AND t >= 0 AND t <= (SELECT max(t) FROM samples WHERE run_id = ? AND vus IS NOT NULL)`).get(runId, runId);
+  const problems = [];
+  if (!c.span) problems.push('no samples');
+  else for (const k of ['k6', 'stats']) if (c[k] < MIN_COVERAGE * c.span) problems.push(`${k} covers ${c[k]}/${c.span} s`);
+  return { ...c, problems };
+}
 
 const pct = (sorted, p) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)] : null);
 const round = (x, d = 2) => (x == null ? null : Math.round(x * 10 ** d) / 10 ** d);
@@ -49,6 +65,8 @@ async function statsSeconds(file) {
 }
 
 async function ingest(db, dir) {
+  const missing = missingFiles(dir);
+  if (missing.length) throw new Error(`missing ${missing.join(', ')}`);
   const meta = JSON.parse(readFileSync(join(dir, 'meta.json'), 'utf8'));
   const k6 = await k6Seconds(join(dir, 'k6.csv.gz'));
   const stats = await statsSeconds(join(dir, 'server-stats.jsonl'));
@@ -82,12 +100,15 @@ async function ingest(db, dir) {
     round(peakMem, 1), round(peakCpu, 1), meta.command, meta.git_sha, meta.image_id);
   const ins = db.prepare('INSERT INTO samples VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
   for (const r of rows) ins.run(...r);
+  const cov = coverage(db, meta.run_id);
+  if (cov.problems.length) { db.exec('ROLLBACK'); throw new Error(`incomplete: ${cov.problems.join('; ')}`); }
   db.exec('COMMIT');
   console.log(`ingested ${meta.run_id}: ${rows.length} s, ${reqs} requests, p95 ${round(pct(all, 95))} ms, peak ${round(peakMem, 1)} MB`);
 }
 
-const dirs = process.argv.slice(2);
-if (!dirs.length) { console.error('usage: node docker/ingest.mjs results/<run-id> [...]'); process.exit(2); }
+const checkOnly = process.argv[2] === '--check';
+const dirs = process.argv.slice(checkOnly ? 3 : 2);
+if (!dirs.length) { console.error('usage: node docker/ingest.mjs [--check] results/<run-id> [...]'); process.exit(2); }
 const db = new DatabaseSync(join(dirname(dirs[0].replace(/\/$/, '')), 'runs.db'));
 db.exec(`
   CREATE TABLE IF NOT EXISTS runs (run_id TEXT PRIMARY KEY, started_at TEXT, submission TEXT, scenario TEXT, vus INTEGER,
@@ -96,8 +117,19 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS samples (run_id TEXT, t INTEGER, vus INTEGER, rps INTEGER, err_pct REAL, p50_ms REAL,
     p95_ms REAL, p99_ms REAL, max_ms REAL, dropped INTEGER, cpu_pct REAL, mem_mb REAL, PRIMARY KEY (run_id, t));`);
 let failed = 0;
-for (const dir of dirs) {
-  if (!existsSync(join(dir, 'meta.json'))) { console.log(`skip ${dir}: no meta.json`); continue; }
+for (const dir of dirs.map((d) => d.replace(/\/$/, ''))) {
+  if (checkOnly) {
+    const runId = basename(dir), missing = missingFiles(dir);
+    const ingested = db.prepare('SELECT 1 FROM runs WHERE run_id = ?').get(runId);
+    const cov = ingested ? coverage(db, runId) : null;
+    const problems = [...(missing.length ? [`missing ${missing.join(', ')}`] : []),
+      ...(ingested ? cov.problems : ['not in runs.db'])];
+    if (problems.length) failed++;
+    console.log(problems.length ? `FAIL ${runId}: ${problems.join('; ')}`
+      : `ok   ${runId}: k6 ${cov.k6}/${cov.span} s, server stats ${cov.stats}/${cov.span} s`);
+    continue;
+  }
   try { await ingest(db, dir); } catch (e) { failed++; console.error(`FAIL ${dir}: ${e.message}`); }
 }
+if (checkOnly) console.log(failed ? `${failed} of ${dirs.length} runs incomplete` : `all ${dirs.length} runs complete`);
 process.exit(failed ? 1 : 0);

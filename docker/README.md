@@ -73,7 +73,7 @@ Each run saves `results/<run-id>/` (gitignored):
 | `server-stats.jsonl` | Raw Docker stats for the server, one JSON object per second |
 | `k6.txt`, `test.txt`, `server.log`, `server-stats.txt` | k6 summary, test output, server log, peak memory and OOM flag |
 
-`docker/ingest.mjs` folds each run into `results/runs.db`. It stores one row per run and one row per
+`docker/ingest.mjs` folds each run into `results/runs.db`. It refuses a run that is missing any of the four data files, or whose k6 samples or server stats cover less than 90% of its seconds, so `bench.sh` fails rather than storing a half-empty run. `make check-runs` audits every folder in `results/`. It stores one row per run and one row per
 second of the run: VUs, requests/s, p50/p95/p99/max latency, failure %, dropped iterations, server CPU
 and memory. `bench.sh` runs it automatically. To rebuild the database from the raw files, run
 `docker compose -f docker/compose.yaml run --rm tools node --no-warnings docker/ingest.mjs results/*/`.
