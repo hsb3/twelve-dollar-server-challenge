@@ -16,7 +16,7 @@ services:
     cpuset: "${SERVER_CPUSET:-1}"
     mem_limit: ${SERVER_MEMORY:-2g}
     memswap_limit: ${SERVER_MEMORY:-2g}
-    ulimits: { nofile: 65535 }
+    ulimits: { nofile: { soft: 65535, hard: 65535 } }
     networks: [ bench ]
 
   tools:
@@ -28,17 +28,51 @@ services:
 
   k6:
     image: grafana/k6:2.3.0
-    volumes: [ "../bench:/bench:ro", "../seed:/seed:ro" ]
+    user: root   # writes results/ through a bind mount, which the image's own user can't on Linux hosts
+    volumes: [ "../bench:/bench:ro", "../seed:/seed:ro", "../results:/results" ]
     environment:
-      BASE_URL: http://server
-      TOKENS: /seed/tokens.json
-      VUS: "${VUS:-100}"
-      DURATION: "${DURATION:-5m}"
-      RAMP_UP: "${RAMP_UP:-60s}"
-    ulimits: { nofile: 65535 }
+      - BASE_URL=http://server
+      - TOKENS=/seed/tokens.json
+      - VUS=${VUS:-100}
+      - DURATION=${DURATION:-5m}
+      - RAMP_UP=${RAMP_UP:-60s}
+      # scenario knobs, passed through only when set (bench/scenarios/*.js)
+      - START
+      - STEP
+      - STEPS
+      - HOLD
+      - RAMP
+      - BASE
+      - PEAK
+      - JUMP
+      - RATE
+      - MIX
+      - MAX_VUS
+    ulimits: { nofile: { soft: 65535, hard: 65535 } }
     networks: [ bench ]
     profiles: [ tools ]
     command: [ "run", "--quiet", "/bench/load.js" ]
+
+  # Streams the server container's CPU and memory from the Docker API, about once a second.
+  stats:
+    image: twelve-dollar-tools
+    volumes: [ "..:/repo", "/var/run/docker.sock:/var/run/docker.sock" ]
+    network_mode: none
+    profiles: [ tools ]
+
+  grafana:
+    image: grafana/grafana:13.2.4
+    ports: [ "127.0.0.1:${GRAFANA_PORT:-3000}:3000" ]
+    environment:
+      GF_PLUGINS_PREINSTALL_SYNC: frser-sqlite-datasource@4.0.6
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/bench-runs.json
+    volumes: [ "./grafana:/etc/grafana/provisioning:ro", "../results:/results:ro", "grafana-data:/var/lib/grafana" ]
+    networks: [ bench ]
+    profiles: [ viz ]
+
+volumes:
+  grafana-data: {}
 
 networks:
   bench:

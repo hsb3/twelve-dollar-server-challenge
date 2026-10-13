@@ -12,4 +12,8 @@ else
   export HOST=0.0.0.0 PORT=80   # Docker lets non-root bind low ports (ip_unprivileged_port_start=0)
 fi
 echo "server: $SUBMISSION nginx=${BEHIND_NGINX:-0} on $HOST:$PORT, $(nproc) cpu(s), cgroup cpu.max=$(cat /sys/fs/cgroup/cpu.max) memory.max=$(cat /sys/fs/cgroup/memory.max)"
-exec runuser -u ubuntu -- bash "/srv/challenge/submissions/$SUBMISSION/start.sh"
+# setpriv, not runuser/su: PAM would reset the open-files limit to 1024 (the SPEC promises 65535).
+export HOME=/home/ubuntu USER=ubuntu LOGNAME=ubuntu
+exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups -- bash -c \
+  '[ "$(ulimit -n)" -ge 65535 ] || { echo "open-files limit is $(ulimit -n), need 65535"; exit 1; }
+   exec bash "/srv/challenge/submissions/$SUBMISSION/start.sh"'

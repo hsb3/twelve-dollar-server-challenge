@@ -1,0 +1,598 @@
+{
+  "uid": "bench-runs",
+  "title": "Bench runs",
+  "timezone": "utc",
+  "graphTooltip": 1,
+  "editable": true,
+  "schemaVersion": 41,
+  "description": "x-axis = time since the run's first request (every run starts at 00:00). Drag across a panel to zoom all of them.",
+  "time": {
+    "from": "1970-01-01T00:00:00.000Z",
+    "to": "1970-01-01T00:10:00.000Z"
+  },
+  "timepicker": {
+    "hidden": false
+  },
+  "refresh": "",
+  "templating": {
+    "list": [
+      {
+        "name": "run",
+        "label": "Runs",
+        "type": "query",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "runs"
+        },
+        "multi": true,
+        "includeAll": false,
+        "refresh": 1,
+        "query": "SELECT run_id FROM runs ORDER BY started_at DESC",
+        "definition": "SELECT run_id FROM runs ORDER BY started_at DESC",
+        "current": {},
+        "options": []
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Virtual users",
+      "description": "k6 VUs (closed-model scenarios).",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "runs"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "runs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT t AS time, run_id AS run, vus AS value FROM samples WHERE run_id IN (${run:sqlstring}) AND t * 1000 BETWEEN $__from AND $__to ORDER BY t",
+          "queryText": "SELECT t AS time, run_id AS run, vus AS value FROM samples WHERE run_id IN (${run:sqlstring}) AND t * 1000 BETWEEN $__from AND $__to ORDER BY t",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "displayName": "${__field.labels.run}",
+          "custom": {
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "fillOpacity": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Requests / s",
+      "description": "",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "runs"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "runs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT t AS time, run_id AS run, rps AS value FROM samples WHERE run_id IN (${run:sqlstring}) AND t * 1000 BETWEEN $__from AND $__to ORDER BY t",
+          "queryText": "SELECT t AS time, run_id AS run, rps AS value FROM samples WHERE run_id IN (${run:sqlstring}) AND t * 1000 BETWEEN $__from AND $__to ORDER BY t",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "displayName": "${__field.labels.run}",
+          "custom": {
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "fillOpacity": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "p95 latency",
+      "description": "Per second. The score needs p95 < 500 ms over the whole hold.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "runs"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "runs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT t AS time, run_id AS run, p95_ms AS value FROM samples WHERE run_id IN (${run:sqlstring}) AND t * 1000 BETWEEN $__from AND $__to ORDER BY t",
+          "queryText": "SELECT t AS time, run_id AS run, p95_ms AS value FROM samples WHERE run_id IN (${run:sqlstring}) AND t * 1000 BETWEEN $__from AND $__to ORDER BY t",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "displayName": "${__field.labels.run}",
+          "custom": {
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "fillOpacity": 0,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 500
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "p99 latency",
+      "description": "Per second. The score needs p99 < 1 s over the whole hold.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "runs"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "runs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT t AS time, run_id AS run, p99_ms AS value FROM samples WHERE run_id IN (${run:sqlstring}) AND t * 1000 BETWEEN $__from AND $__to ORDER BY t",
+          "queryText": "SELECT t AS time, run_id AS run, p99_ms AS value FROM samples WHERE run_id IN (${run:sqlstring}) AND t * 1000 BETWEEN $__from AND $__to ORDER BY t",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "displayName": "${__field.labels.run}",
+          "custom": {
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "fillOpacity": 0,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1000
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Failed requests",
+      "description": "Share of requests that failed in each second. The score needs < 1%.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "runs"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "runs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT t AS time, run_id AS run, err_pct AS value FROM samples WHERE run_id IN (${run:sqlstring}) AND t * 1000 BETWEEN $__from AND $__to ORDER BY t",
+          "queryText": "SELECT t AS time, run_id AS run, err_pct AS value FROM samples WHERE run_id IN (${run:sqlstring}) AND t * 1000 BETWEEN $__from AND $__to ORDER BY t",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "displayName": "${__field.labels.run}",
+          "custom": {
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "fillOpacity": 0,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            },
+            "axisSoftMax": 2
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Dropped iterations / s",
+      "description": "Open-model (rate) scenario only: requests k6 could not start because the server fell behind.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "runs"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "runs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT t AS time, run_id AS run, dropped AS value FROM samples WHERE run_id IN (${run:sqlstring}) AND t * 1000 BETWEEN $__from AND $__to ORDER BY t",
+          "queryText": "SELECT t AS time, run_id AS run, dropped AS value FROM samples WHERE run_id IN (${run:sqlstring}) AND t * 1000 BETWEEN $__from AND $__to ORDER BY t",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "displayName": "${__field.labels.run}",
+          "custom": {
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "fillOpacity": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Server CPU",
+      "description": "Percent of one core, sampled from the Docker API about once a second. 100 = the 1-vCPU limit.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "runs"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "runs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT t AS time, run_id AS run, cpu_pct AS value FROM samples WHERE run_id IN (${run:sqlstring}) AND t * 1000 BETWEEN $__from AND $__to ORDER BY t",
+          "queryText": "SELECT t AS time, run_id AS run, cpu_pct AS value FROM samples WHERE run_id IN (${run:sqlstring}) AND t * 1000 BETWEEN $__from AND $__to ORDER BY t",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "displayName": "${__field.labels.run}",
+          "custom": {
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "fillOpacity": 0,
+            "axisSoftMax": 100
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Server memory",
+      "description": "Usage minus reclaimable page cache, the same figure as docker stats. The limit is the run's memory setting.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "runs"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "runs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT t AS time, run_id AS run, mem_mb AS value FROM samples WHERE run_id IN (${run:sqlstring}) AND t * 1000 BETWEEN $__from AND $__to ORDER BY t",
+          "queryText": "SELECT t AS time, run_id AS run, mem_mb AS value FROM samples WHERE run_id IN (${run:sqlstring}) AND t * 1000 BETWEEN $__from AND $__to ORDER BY t",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes",
+          "displayName": "${__field.labels.run}",
+          "custom": {
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": true,
+            "fillOpacity": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "table",
+      "title": "All runs",
+      "description": "Whole-run numbers. command re-runs that exact configuration.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "runs"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 24,
+        "h": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "runs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT run_id, started_at, submission, scenario, vus, nginx, cpus, memory, platform, k6_exit, reqs, p95_ms, p99_ms, err_pct, peak_mem_mb, peak_cpu_pct, command FROM runs ORDER BY started_at DESC",
+          "queryText": "SELECT run_id, started_at, submission, scenario, vus, nginx, cpus, memory, platform, k6_exit, reqs, p95_ms, p99_ms, err_pct, peak_mem_mb, peak_cpu_pct, command FROM runs ORDER BY started_at DESC",
+          "timeColumns": []
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "minWidth": 80
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "run_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 380
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "command"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 420
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "started_at"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 190
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    }
+  ]
+}
