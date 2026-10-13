@@ -11,6 +11,13 @@ no separate k6 box, and nothing installed on the host.
 | `grafana` | Dashboard over every recorded run (`results/runs.db`) |
 | `tools` | node, sqlite3, curl, jq, openssl: builds the seed, runs [`test/test.sh`](../test/test.sh), ingests results |
 
+## Safety: reviews and sandbox
+
+A submission runs only after a passing security review of its exact committed code. Each run also
+checks, before any load, that the server is sandboxed: it sits on an internal Docker network with no
+internet, LAN or host access, and runs as a non-root user with `no-new-privileges`. Builds still
+download from the internet. See [`reviews/README.md`](reviews/README.md).
+
 ## Run a benchmark
 
 ```bash
@@ -32,9 +39,9 @@ exits with k6's status (non-zero when a threshold fails).
 | `SERVER_CPUSET` | `1` | Cores the server may use. It sets what `nproc` reports, so keep it at `SERVER_CPUS` cores |
 | `SERVER_MEMORY` | `2g` | Memory limit. Swap is set to the same value, so no swap |
 | `SERVER_PLATFORM` | native | `linux/amd64` builds and runs the server for x86_64. k6 stays native |
-| `SERVER_SECCOMP` | `builtin` | `unconfined` lifts Docker's syscall filter, which blocks io_uring (the droplet doesn't). Needed by io_uring submissions such as `rust-epoll-scooter1337` |
+| `SERVER_SECCOMP` | from the review | Taken from the submission's security review. `unconfined` (needed for io_uring) only when the review approves it |
 | `SKIP_TEST` | `0` | `1` skips the test suite |
-| `BENCH_SUBNET`, `GRAFANA_PORT` | `10.212.12.0/24`, `3000` | Change them if they clash with something on your machine |
+| `BENCH_SUBNET`, `VIZ_SUBNET`, `GRAFANA_PORT` | `10.212.12.0/24`, `10.212.13.0/24`, `3000` | Change them if they clash with something on your machine |
 
 ## Load scenarios
 

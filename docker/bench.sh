@@ -16,7 +16,7 @@ SCENARIO="${SCENARIO:-load}"
 if [ "$SCENARIO" = load ]; then SCRIPT=load.js; else SCRIPT="scenarios/$SCENARIO.js"; fi
 [ -f "$ROOT/bench/$SCRIPT" ] || { echo "no bench/$SCRIPT"; exit 1; }
 RUN="$(date -u +%Y%m%d-%H%M%S)_${SUBMISSION}_${SCENARIO}"
-OUT="$ROOT/results/$RUN"; mkdir -p "$OUT"
+OUT="$ROOT/results/$RUN"
 dc() { docker compose -f "$ROOT/docker/compose.yaml" "$@"; }
 
 wait_healthy() {
@@ -29,6 +29,19 @@ finish() {
   dc rm -sfv server >/dev/null 2>&1 || true   # also ends the stats stream; leaves Grafana up
   [ -z "$STATS" ] || docker wait "$STATS" >/dev/null 2>&1 || true
 }
+
+# Only run code that passed a security review of exactly this tree (docker/reviews/README.md).
+REVIEW="$ROOT/docker/reviews/$SUBMISSION.md"
+field() { sed -n "s/^$1: *//p" "$REVIEW" | head -1; }
+die() { echo "refusing to run $SUBMISSION: $*"; exit 1; }
+[ -f "$REVIEW" ] || die "no security review at docker/reviews/$SUBMISSION.md"
+[ "$(field verdict)" = pass ] || die "review verdict is '$(field verdict)', not pass"
+tree="$(git -C "$ROOT" rev-parse -q --verify "HEAD:submissions/$SUBMISSION")" || die "submissions/$SUBMISSION is not committed"
+[ "$(field tree)" = "$tree" ] || die "review covers tree $(field tree), but the committed submission is $tree"
+[ -z "$(git -C "$ROOT" status --porcelain --ignored -- "submissions/$SUBMISSION")" ] || die "submissions/$SUBMISSION has local changes"
+[ -z "${SERVER_SECCOMP:-}" ] || [ "$SERVER_SECCOMP" = "$(field seccomp)" ] || die "its review allows seccomp=$(field seccomp), not $SERVER_SECCOMP"
+export SERVER_SECCOMP="$(field seccomp)"
+mkdir -p "$OUT"
 trap finish EXIT
 
 [ -f "$ROOT/seed/feed.db" ] || { echo "== seed"; dc run --rm -T tools bash seed/make-seed.sh; }
@@ -42,6 +55,11 @@ if [ "${SKIP_TEST:-0}" != 1 ]; then
   dc run --rm -T tools bash test/test.sh http://server | tee "$OUT/test.txt"
   dc restart server && wait_healthy   # the tests write rows; load-test a fresh copy
 fi
+
+# The server must have no route out and no reachable internet before it takes load.
+dc exec -T server sh -c '! awk "\$2 == \"00000000\"" /proc/net/route | grep -q . && ! curl -s -m 3 -o /dev/null https://example.com' \
+  || die "sandbox check failed: the server container can reach outside the bench network"
+echo "== sandbox: server has no outbound route"
 
 id="$(dc ps -q server)"
 STATS="$(dc run -d --rm stats sh -c "exec curl -sN --unix-socket /var/run/docker.sock http://localhost/containers/$id/stats > /repo/results/$RUN/server-stats.jsonl")"

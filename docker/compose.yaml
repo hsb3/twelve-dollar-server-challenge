@@ -17,8 +17,9 @@ services:
     mem_limit: ${SERVER_MEMORY:-2g}
     memswap_limit: ${SERVER_MEMORY:-2g}
     ulimits: { nofile: { soft: 65535, hard: 65535 } }
-    # Docker's default filter blocks io_uring; the droplet doesn't. SERVER_SECCOMP=unconfined lifts it.
-    security_opt: [ "seccomp=${SERVER_SECCOMP:-builtin}" ]
+    # Docker's default filter blocks io_uring; the droplet doesn't. SERVER_SECCOMP=unconfined lifts it;
+    # bench.sh takes it from the submission's security review.
+    security_opt: [ "seccomp=${SERVER_SECCOMP:-builtin}", "no-new-privileges:true" ]
     networks: [ bench ]
 
   tools:
@@ -70,13 +71,16 @@ services:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/bench-runs.json
     volumes: [ "./grafana:/etc/grafana/provisioning:ro", "../results:/results:ro", "grafana-data:/var/lib/grafana" ]
-    networks: [ bench ]
+    networks: [ viz ]   # not bench: it needs the internet for its plugin and a published port
     profiles: [ viz ]
 
 volumes:
   grafana-data: {}
 
+# Subnets are explicit so this works when Docker's default address pools are used up.
 networks:
   bench:
-    # Explicit so it works when Docker's default address pools are used up.
+    internal: true   # the sandbox: no internet, LAN or host access. Image builds don't use this network.
     ipam: { config: [ { subnet: "${BENCH_SUBNET:-10.212.12.0/24}" } ] }
+  viz:
+    ipam: { config: [ { subnet: "${VIZ_SUBNET:-10.212.13.0/24}" } ] }
