@@ -1,0 +1,46 @@
+# Isolated benchmark stack. Run it through docker/bench.sh; see docker/README.md.
+name: twelve-dollar
+
+services:
+  server:
+    image: twelve-dollar-server:${SUBMISSION:-unset}
+    platform: ${SERVER_PLATFORM:-}
+    build:
+      context: ..
+      dockerfile: docker/server.Dockerfile
+      args: { SUBMISSION: "${SUBMISSION}" }
+    environment: { BEHIND_NGINX: "${NGINX:-0}" }  # not NGINX: nginx reads that var itself
+    volumes: [ "../seed:/seed:ro" ]
+    # The $12 droplet: 1 vCPU, 2 GB, no swap. cpuset makes nproc report the box's CPU count too.
+    cpus: ${SERVER_CPUS:-1}
+    cpuset: "${SERVER_CPUSET:-1}"
+    mem_limit: ${SERVER_MEMORY:-2g}
+    memswap_limit: ${SERVER_MEMORY:-2g}
+    ulimits: { nofile: 65535 }
+    networks: [ bench ]
+
+  tools:
+    build: { context: ., dockerfile: tools.Dockerfile }
+    image: twelve-dollar-tools
+    volumes: [ "..:/repo" ]
+    networks: [ bench ]
+    profiles: [ tools ]
+
+  k6:
+    image: grafana/k6:2.3.0
+    volumes: [ "../bench:/bench:ro", "../seed:/seed:ro" ]
+    environment:
+      BASE_URL: http://server
+      TOKENS: /seed/tokens.json
+      VUS: "${VUS:-100}"
+      DURATION: "${DURATION:-5m}"
+      RAMP_UP: "${RAMP_UP:-60s}"
+    ulimits: { nofile: 65535 }
+    networks: [ bench ]
+    profiles: [ tools ]
+    command: [ "run", "--quiet", "/bench/load.js" ]
+
+networks:
+  bench:
+    # Explicit so it works when Docker's default address pools are used up.
+    ipam: { config: [ { subnet: "${BENCH_SUBNET:-10.212.12.0/24}" } ] }
