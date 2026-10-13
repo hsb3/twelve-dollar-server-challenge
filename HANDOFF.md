@@ -84,10 +84,13 @@ limit. Each 10k run was about 374k requests, roughly 1k req/s at the hold.
 
 ## Running it
 
+`make` lists the shortcuts.
+
 ```bash
-docker compose -f docker/compose.yaml up -d grafana        # dashboard on http://localhost:3000
-bash docker/bench.sh python-fastapi-cknutson12 10000       # direct
-NGINX=1 bash docker/bench.sh ruby-rails-gambitboy 10000    # behind Nginx
+make dashboard                                       # Grafana on http://localhost:3000
+make bench S=python-fastapi-cknutson12 VUS=10000     # direct
+make bench S=ruby-rails-gambitboy VUS=10000 NGINX=1  # behind Nginx
+make reviews                                         # which submissions are cleared to run
 ```
 
 ## Gotchas

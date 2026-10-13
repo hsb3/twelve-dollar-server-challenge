@@ -8,7 +8,7 @@ services:
     build:
       context: ..
       dockerfile: docker/server.Dockerfile
-      args: { SUBMISSION: "${SUBMISSION}" }
+      args: { SUBMISSION: "${SUBMISSION:-}" }
     environment: { BEHIND_NGINX: "${NGINX:-0}" }  # not NGINX: nginx reads that var itself
     volumes: [ "../seed:/seed:ro" ]
     # The $12 droplet: 1 vCPU, 2 GB, no swap. cpuset makes nproc report the box's CPU count too.

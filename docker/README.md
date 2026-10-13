@@ -20,6 +20,9 @@ download from the internet. See [`reviews/README.md`](reviews/README.md).
 
 ## Run a benchmark
 
+The repo-root `Makefile` wraps the commands below. Run `make` to list them, for example
+`make bench S=<submission> VUS=1000 NGINX=1`, `make dashboard` and `make reviews`.
+
 ```bash
 bash docker/bench.sh python-fastapi-cknutson12 1000                  # the OP's load.js, direct on :80
 NGINX=1 bash docker/bench.sh ruby-rails-gambitboy 1000               # behind Nginx, app on 127.0.0.1:3000
