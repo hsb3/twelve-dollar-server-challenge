@@ -1,9 +1,9 @@
 mod db;
+mod lufp;
 mod net;
 mod uring;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use hmac::{Hmac, Mac};
-use serde::Deserialize;
 use sha2::Sha256;
 use std::{
     borrow::Cow,
@@ -93,28 +93,24 @@ fn positive(s: &str) -> Option<i64> {
     }
     s.parse::<i64>().ok().filter(|v| *v > 0)
 }
+#[cold]
+fn post_error(path: &str, status: u16, message: &str, out: &mut Vec<u8>) -> u16 {
+    // Nested paths are unknown regardless of authentication. Keep this check
+    // on error branches so successful requests retain their parsing sequence.
+    if path
+        .strip_prefix("/posts/")
+        .and_then(|s| s.strip_suffix("/like"))
+        .is_some_and(|s| s.contains('/'))
+    {
+        return error(out, 404, "not found");
+    }
+    error(out, status, message)
+}
 struct Auth {
     mac: Hmac<Sha256>,
     header: Vec<u8>,
     payload: Vec<u8>,
 }
-#[derive(Deserialize)]
-struct Header<'a> {
-    #[serde(borrow)]
-    alg: Cow<'a, str>,
-}
-#[derive(Deserialize)]
-struct Claims<'a> {
-    #[serde(borrow)]
-    sub: Option<&'a serde_json::value::RawValue>,
-    #[serde(borrow)]
-    username: Option<&'a serde_json::value::RawValue>,
-    exp: Option<f64>,
-    nbf: Option<f64>,
-}
-#[derive(Deserialize)]
-#[serde(transparent)]
-struct Text<'a>(#[serde(borrow)] Cow<'a, str>);
 impl Auth {
     fn new(secret: &str) -> Self {
         Self {
@@ -147,18 +143,13 @@ impl Auth {
         URL_SAFE_NO_PAD
             .decode_vec(h, &mut self.header)
             .map_err(|_| bad)?;
-        let header: Header = serde_json::from_slice(&self.header).map_err(|_| bad)?;
-        if header.alg != "HS256" {
-            return Err(bad);
-        }
+        lufp::header(&self.header).map_err(|_| bad)?;
         self.payload.clear();
         URL_SAFE_NO_PAD
             .decode_vec(p, &mut self.payload)
             .map_err(|_| bad)?;
-        // Borrow claim spans directly; no dynamic JSON tree or per-field maps.
-        // Keeping sub/name raw lets us distinguish malformed tokens from validly
-        // signed tokens with a wrong payload type, as required by the spec.
-        let claims: Claims = serde_json::from_slice(&self.payload).map_err(|_| bad)?;
+        // One validating pass retains decoded string claims, borrowing plain UTF-8.
+        let claims = lufp::claims(&self.payload).map_err(|_| bad)?;
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -168,89 +159,10 @@ impl Auth {
             return Err(bad);
         }
         let payload_error = "invalid token payload";
-        let sub: Text = serde_json::from_str(claims.sub.ok_or(payload_error)?.get())
-            .map_err(|_| payload_error)?;
-        let id = positive(&sub.0).ok_or(payload_error)?;
-        let name: Text = serde_json::from_str(claims.username.ok_or(payload_error)?.get())
-            .map_err(|_| payload_error)?;
-        Ok((id, name.0))
-    }
-}
-// Visit the complete JSON document, keeping only the last top-level body string.
-// Plain strings borrow the request. Escaped strings use serde's checked decoder.
-// Ignored fields are still validated, including Unicode and nested containers.
-#[derive(Clone, Copy)]
-enum BodySeed {
-    Root,
-    String,
-    Ignore,
-}
-impl<'de> serde::de::DeserializeSeed<'de> for BodySeed {
-    type Value = Option<Cow<'de, str>>;
-    fn deserialize<D: serde::Deserializer<'de>>(self, d: D) -> Result<Self::Value, D::Error> {
-        d.deserialize_any(self)
-    }
-}
-impl<'de> serde::de::Visitor<'de> for BodySeed {
-    type Value = Option<Cow<'de, str>>;
-    fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("a JSON value")
-    }
-    fn visit_borrowed_str<E: serde::de::Error>(self, s: &'de str) -> Result<Self::Value, E> {
-        Ok(matches!(self, Self::String).then_some(Cow::Borrowed(s)))
-    }
-    fn visit_str<E: serde::de::Error>(self, s: &str) -> Result<Self::Value, E> {
-        Ok(if matches!(self, Self::String) {
-            Some(Cow::Owned(s.to_owned()))
-        } else {
-            None
-        })
-    }
-    fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
-        Ok(None)
-    }
-    fn visit_bool<E: serde::de::Error>(self, _: bool) -> Result<Self::Value, E> {
-        Ok(None)
-    }
-    fn visit_i64<E: serde::de::Error>(self, _: i64) -> Result<Self::Value, E> {
-        Ok(None)
-    }
-    fn visit_u64<E: serde::de::Error>(self, _: u64) -> Result<Self::Value, E> {
-        Ok(None)
-    }
-    fn visit_f64<E: serde::de::Error>(self, _: f64) -> Result<Self::Value, E> {
-        Ok(None)
-    }
-    fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-        while seq.next_element_seed(Self::Ignore)?.is_some() {}
-        Ok(None)
-    }
-    fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
-        let mut body = None;
-        if matches!(self, Self::Root) {
-            while let Some(Text(key)) = map.next_key::<Text<'de>>()? {
-                let value = map.next_value_seed(if key == "body" {
-                    Self::String
-                } else {
-                    Self::Ignore
-                })?;
-                if key == "body" {
-                    body = value;
-                }
-            }
-        } else {
-            while map.next_key_seed(Self::Ignore)?.is_some() {
-                map.next_value_seed(Self::Ignore)?;
-            }
-        }
-        Ok(body)
-    }
-}
-struct PostBody<'a>(Option<Cow<'a, str>>);
-impl<'de> Deserialize<'de> for PostBody<'de> {
-    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        use serde::de::DeserializeSeed;
-        BodySeed::Root.deserialize(d).map(Self)
+        let sub = claims.sub.ok_or(payload_error)?;
+        let id = positive(&sub).ok_or(payload_error)?;
+        let name = claims.username.ok_or(payload_error)?;
+        Ok((id, name))
     }
 }
 pub struct Frame<'a> {
@@ -408,7 +320,9 @@ impl App {
                 if let Some(id) = positive(s) {
                     return self.db.read(Some(id), out);
                 }
-                return error(out, 400, "invalid post id");
+                if !s.contains('/') {
+                    return error(out, 400, "invalid post id");
+                }
             }
         }
         if frame.method == "POST"
@@ -416,14 +330,14 @@ impl App {
         {
             let (user, username) = match self.auth.user(frame.authorization) {
                 Ok(v) => v,
-                Err(msg) => return error(out, 401, msg),
+                Err(msg) => return post_error(path, 401, msg, out),
             };
             if path == "/posts" {
-                let value: PostBody = match serde_json::from_slice(&frame.body) {
+                let value = match lufp::post_body(&frame.body) {
                     Ok(v) => v,
                     Err(_) => return error(out, 400, "malformed JSON body"),
                 };
-                let Some(body) = value.0 else {
+                let Some(body) = value else {
                     return error(out, 400, "body is required");
                 };
                 let body = body.trim_matches(|c: char| c.is_whitespace() || c == '\u{feff}');
@@ -440,7 +354,7 @@ impl App {
                 .and_then(|s| s.strip_suffix("/like"))
                 .and_then(positive)
             else {
-                return error(out, 400, "invalid post id");
+                return post_error(path, 400, "invalid post id", out);
             };
             return self.db.like(user, id, out);
         }
@@ -489,3 +403,7 @@ fn main() {
 include!("../tests/support/allocations.rs");
 #[cfg(test)]
 include!("../tests/support/snapshots.rs");
+
+#[cfg(test)]
+#[path = "../tests/support/serde_oracle.rs"]
+mod serde_oracle;

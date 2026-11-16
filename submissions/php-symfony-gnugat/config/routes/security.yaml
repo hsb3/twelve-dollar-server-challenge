@@ -1,0 +1,3 @@
+_security:
+    resource: security.route_loader
+    type: service
