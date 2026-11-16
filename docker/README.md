@@ -108,3 +108,30 @@ To re-run a recorded configuration, run its `command` (from the table, or `jq -r
 - **No scoring search.** The OP warms up, doubles the VUs until a run fails, narrows the range to 250
   users, then confirms with a 5-minute hold. `stairs` gets close in one run. For the real procedure,
   call `bench.sh` with different `VUS`.
+
+## Results so far
+
+From an Apple Silicon Mac on Docker Desktop (arm64 server, Docker VM with 16 CPUs and 11.7 GB, k6 on
+the same machine), so **not comparable to the upstream scores**. `results/` is gitignored, so this
+table is the durable record. `load.js` at 10,000 VUs (60 s ramp, 5 min hold), sandboxed, after the
+test suite passed, recorded 2026-10-13:
+
+| Submission | p95 | p99 | Failed | Peak server CPU (% of one core) | Peak memory (excluding page cache) |
+|---|---|---|---|---|---|
+| python-fastapi-cknutson12 | 0.54 ms | 1.14 ms | 0% | 22% | 221 MB |
+| ruby-rails-gambitboy | 1.30 ms | 2.45 ms | 0% | 45% | 236 MB |
+| rust-epoll-scooter1337 | 0.48 ms | 0.87 ms | 0% | 10% | 62 MB |
+
+A `stairs` run against Rust up to 25k VUs gave p95 0.45 ms, p99 1.06 ms, 0% failures, peak 11% of one
+core and 125 MB. No run has come near a server's limit. In this VM, k6's memory caps a full `load.js`
+hold at about 20-22k VUs. See [`LOAD-TESTING-NOTES.md`](LOAD-TESTING-NOTES.md) for the sizing numbers.
+
+The Rust row was measured on the PR version of `rust-epoll-scooter1337`. Upstream has since merged a
+newer version, so its review is stale and needs redoing before it runs again.
+
+## Not done yet
+
+- Rust at 50k VUs. It needs about 18 GB for k6 and the server: raise Docker Desktop's memory, or use
+  one of the options in the notes.
+- The `spike` scenario has never been run.
+- Upstream's scoring search isn't automated (see above).
