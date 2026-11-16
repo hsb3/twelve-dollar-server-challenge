@@ -8,6 +8,14 @@ from pathlib import Path
 
 LB = Path(__file__).resolve().parents[2] / "LEADERBOARD.md"
 ROW = re.compile(r"^\| (\d+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| \*\*([\d,]+)\*\*")
+METRICS = ["reqs", "p95", "p99", "err", "cpu", "us", "ram"]  # the columns after "Users held", in order
+
+
+def num(cell):
+    try:
+        return float(cell.replace(",", ""))
+    except ValueError:
+        return None
 LANGS = [("Rust", r"^Rust\b"), ("Go", r"^Go\b"), ("Python", r"^(Python|PyPy)\b"),
          ("TypeScript/JS", r"^(TypeScript|Node|Bun|Deno|JavaScript)\b")]
 STRATEGIES = ["Framework or runtime server", "Hand-rolled epoll", "Hand-rolled io_uring"]
@@ -33,6 +41,8 @@ def rows():
         if lang:
             out.append({"name": name, "pr": pr, "desc": desc, "lang": lang, "users": int(users.replace(",", "")),
                         "strategy": strategy(desc), "nginx": "behind nginx" in desc.lower()})
+            cells = [c.strip() for c in line.split("|")[6:]]
+            out[-1].update(zip(METRICS, map(num, cells)), scored=cells[len(METRICS)])
     return out
 
 
@@ -57,6 +67,7 @@ def eta_squared(rs, key):
 if __name__ == "__main__":
     rs = rows()
     assert len(rs) > 40 and {r["lang"] for r in rs} == {l for l, _ in LANGS}, "parse failed"
+    assert all(r["reqs"] and r["us"] and re.match(r"\d{4}-\d\d-\d\d$", r["scored"]) for r in rs), "metric columns moved"
     for lang, _ in LANGS:
         print(lang, {k: round(v) for k, v in quartiles([r["users"] for r in rs if r["lang"] == lang]).items()})
     for s in STRATEGIES:

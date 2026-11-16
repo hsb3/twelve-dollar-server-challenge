@@ -1,128 +1,240 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><title>Users held, by language and strategy</title>
+<html lang="en"><head><meta charset="utf-8"><title>$12 server challenge: what drives the score</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-.viz-root { --surface-1:#fcfcfb; --text-primary:#1d1d1b; --text-secondary:#5f5e58; --grid:#e4e3de;
-  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --box:#efeee9; }
-@media (prefers-color-scheme: dark) { .viz-root { --surface-1:#1a1a19; --text-primary:#f0efec; --text-secondary:#c3c2b7;
-  --grid:#33332f; --s1:#3987e5; --s2:#d95926; --s3:#199e70; --box:#262624; } }
+.viz-root { --surface-1:#fcfcfb; --surface-2:#f3f2ee; --text-primary:#1d1d1b; --text-secondary:#52514e; --grid:#e1e0d9;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --box:#efeee9; --good:#0ca30c; --critical:#d03b3b; }
+@media (prefers-color-scheme: dark) { .viz-root { --surface-1:#1a1a19; --surface-2:#232321; --text-primary:#f0efec;
+  --text-secondary:#c3c2b7; --grid:#33332f; --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --box:#2a2a27; } }
 body { margin:0; }
-.viz-root { background:var(--surface-1); color:var(--text-primary); font:14px/1.45 system-ui, sans-serif; padding:24px 32px; max-width:1000px; }
-h1 { font-size:20px; margin:0 0 4px; } p { margin:4px 0 12px; color:var(--text-secondary); }
-.legend { display:flex; gap:20px; margin:8px 0; color:var(--text-secondary); } .legend span { display:flex; gap:6px; align-items:center; }
+.viz-root { background:var(--surface-1); color:var(--text-primary); font:14px/1.45 system-ui, sans-serif; padding:24px 32px; }
+.wrap { max-width:1180px; margin:0 auto; }
+h1 { font-size:22px; margin:0 0 2px; } h2 { font-size:15px; margin:0 0 8px; }
+p { margin:4px 0 12px; } .muted, .sub { color:var(--text-secondary); }
+.controls { display:flex; flex-wrap:wrap; gap:12px 20px; align-items:end; padding:12px 16px; margin:16px 0;
+  background:var(--surface-2); border-radius:8px; }
+.controls label { display:flex; flex-direction:column; gap:3px; font-size:12px; color:var(--text-secondary); }
+.controls select { font:inherit; padding:4px 8px; color:var(--text-primary); background:var(--surface-1);
+  border:1px solid var(--grid); border-radius:6px; }
+.controls fieldset { border:0; margin:0; padding:0; display:flex; gap:12px; align-items:center; }
+.controls legend { font-size:12px; color:var(--text-secondary); padding:0; margin-bottom:3px; }
+.controls fieldset label { flex-direction:row; align-items:center; font-size:14px; color:var(--text-primary); }
+.main { display:grid; grid-template-columns:minmax(0,1.7fr) minmax(280px,1fr); gap:24px; align-items:start; }
+@media (max-width:900px) { .main { grid-template-columns:1fr; } }
+.legend { display:flex; flex-wrap:wrap; gap:6px 18px; margin:0 0 4px; color:var(--text-secondary); }
+.legend span { display:flex; gap:6px; align-items:center; }
+svg { display:block; width:100%; height:auto; }
 svg text { fill:var(--text-secondary); font-size:12px; } svg .label { fill:var(--text-primary); font-size:14px; font-weight:600; }
 .grid { stroke:var(--grid); } .cap { stroke:var(--text-secondary); stroke-dasharray:4 4; }
 .box { fill:var(--box); } .whisker { stroke:var(--text-secondary); stroke-width:1; }
 .median { stroke:var(--text-primary); stroke-width:2; } .mean { fill:var(--text-primary); }
-.dot { stroke:var(--surface-1); stroke-width:2; cursor:pointer; } .dot:hover { stroke:var(--text-primary); }
-.s1 { fill:var(--s1); } .s2 { fill:var(--s2); } .s3 { fill:var(--s3); }
-.nginx { fill:var(--surface-1); stroke:var(--s1); stroke-width:2; }
-.stats { display:flex; gap:24px; margin:12px 0; } .stat b { display:block; font-size:24px; }
-table { border-collapse:collapse; margin:8px 0 16px; font-variant-numeric:tabular-nums; }
-td, th { padding:3px 10px; text-align:right; border-bottom:1px solid var(--grid); } td:first-child, th:first-child { text-align:left; }
-.muted { color:var(--text-secondary); }
+.dot { stroke:var(--surface-1); stroke-width:2; cursor:pointer; } .dot:hover, .dot:focus { stroke:var(--text-primary); outline:none; }
+.c1 { fill:var(--s1); --c:var(--s1); } .c2 { fill:var(--s2); --c:var(--s2); } .c3 { fill:var(--s3); --c:var(--s3); } .c4 { fill:var(--s4); --c:var(--s4); }
+.dot.nginx { fill:var(--surface-1); stroke:var(--c); }
+.side { background:var(--surface-2); border-radius:8px; padding:16px; }
+.tile { display:grid; grid-template-columns:112px 1fr; gap:12px; align-items:center; padding:8px 0; border-bottom:1px solid var(--grid); }
+.tile b { font-size:22px; white-space:nowrap; padding-left:8px; border-left:4px solid var(--grid); }
+.tile.good b { border-color:var(--good); } .tile.bad b { border-color:var(--critical); }
+.tile small { display:block; font-size:11px; font-weight:400; color:var(--text-secondary); }
+.side ul { margin:12px 0 0; padding-left:18px; } .side li { margin:6px 0; }
+section { border-top:2px solid var(--grid); margin-top:24px; padding-top:16px; }
+.tables { display:flex; flex-wrap:wrap; gap:8px 40px; }
+table { border-collapse:collapse; margin:4px 0 12px; font-variant-numeric:tabular-nums; }
+caption { text-align:left; color:var(--text-secondary); padding-bottom:4px; }
+td, th { padding:3px 10px; text-align:right; border-bottom:1px solid var(--grid); white-space:nowrap; }
+td:first-child, th:first-child, td.l, th.l { text-align:left; } th.on, td.on { background:var(--surface-2); }
+.scroll { max-height:340px; overflow:auto; border:1px solid var(--grid); border-radius:6px; }
+.scroll table { margin:0; width:100%; } .scroll th { position:sticky; top:0; background:var(--surface-1); }
+.scroll th.on { background:var(--surface-2); } .scroll td.l { white-space:normal; }
+.method { font-size:13px; color:var(--text-secondary); } .method li { margin:3px 0; }
 #tip { position:fixed; pointer-events:none; background:var(--surface-1); color:var(--text-primary); border:1px solid var(--grid);
-  border-radius:6px; padding:6px 10px; box-shadow:0 2px 8px #0003; display:none; max-width:320px; }
+  border-radius:6px; padding:6px 10px; box-shadow:0 2px 8px #0003; display:none; max-width:320px; z-index:2; }
 </style></head>
-<body><div class="viz-root">
-<h1>Users held, by language and strategy</h1>
-<p>Each dot is one entry on upstream's leaderboard (60 entries in Rust, Go, Python and TypeScript/JS, which includes Node, Bun and Deno).
-Box = quartiles, bar = median, ▼ = mean. Hollow dots run behind Nginx.</p>
-<div class="stats">
- <div class="stat"><b>68%</b>of the spread explained by strategy</div>
- <div class="stat"><b>27%</b>explained by language</div>
- <div class="stat"><b>74%</b>by both together</div>
+<body><div class="viz-root"><div class="wrap">
+<h1>$12 server challenge: what drives the score</h1>
+<p class="sub" id="sub"></p>
+
+<div class="controls">
+ <label>Category (rows)<select id="cat"></select></label>
+ <label>Labels (dot colour)<select id="col"></select></label>
+ <label>Metric<select id="met"></select></label>
+ <fieldset><legend>Statistics</legend>
+  <label><input type="checkbox" id="st-box" checked> Quartile box</label>
+  <label><input type="checkbox" id="st-median" checked> Median</label>
+  <label><input type="checkbox" id="st-mean" checked> Mean</label>
+  <label><input type="checkbox" id="st-range" checked> Min to max</label>
+ </fieldset>
 </div>
-<div class="legend"><span><svg width="12" height="12"><circle class="dot s1" cx="6" cy="6" r="5"/></svg>Framework or runtime server</span><span><svg width="12" height="12"><circle class="dot s2" cx="6" cy="6" r="5"/></svg>Hand-rolled epoll</span><span><svg width="12" height="12"><circle class="dot s3" cx="6" cy="6" r="5"/></svg>Hand-rolled io_uring</span></div>
-<svg viewBox="0 0 960 452" role="img" aria-label="Users held per entry, by language, coloured by strategy">
-<line class="grid" x1="120.0" x2="120.0" y1="28" y2="418"/><text class="axis" x="120.0" y="436" text-anchor="middle">0k</text>
-<line class="grid" x1="247.5" x2="247.5" y1="28" y2="418"/><text class="axis" x="247.5" y="436" text-anchor="middle">50k</text>
-<line class="grid" x1="375.0" x2="375.0" y1="28" y2="418"/><text class="axis" x="375.0" y="436" text-anchor="middle">100k</text>
-<line class="grid" x1="502.5" x2="502.5" y1="28" y2="418"/><text class="axis" x="502.5" y="436" text-anchor="middle">150k</text>
-<line class="grid" x1="630.0" x2="630.0" y1="28" y2="418"/><text class="axis" x="630.0" y="436" text-anchor="middle">200k</text>
-<line class="grid" x1="757.5" x2="757.5" y1="28" y2="418"/><text class="axis" x="757.5" y="436" text-anchor="middle">250k</text>
-<line class="grid" x1="885.0" x2="885.0" y1="28" y2="418"/><text class="axis" x="885.0" y="436" text-anchor="middle">300k</text>
-<line class="cap" x1="301.04999999999995" x2="301.04999999999995" y1="18" y2="418"/><text class="axis" x="305.04999999999995" y="14">65,535 open-file cap ≈ 71k</text>
-<text class="label" x="108" y="81.0" text-anchor="end">Rust</text><line class="whisker" x1="244.95" x2="910.5" y1="76.0" y2="76.0"/><rect class="box" x="301.04999999999995" y="50.0" width="507.45000000000005" height="52" rx="4"/><line class="median" x1="706.5" x2="706.5" y1="50.0" y2="102.0"/><path class="mean" d="M585.276923076923,43.0 l6,-7 h-12 z"/>
-<circle class="dot s3" cx="910.5" cy="69.7" r="5" data-tip="{&quot;n&quot;: &quot;rust-iouring-kensac&quot;, &quot;d&quot;: &quot;Rust (io_uring, SQLite B-tree reads)&quot;, &quot;u&quot;: 310000, &quot;s&quot;: &quot;Hand-rolled io_uring&quot;}"/>
-<circle class="dot s3" cx="885.0" cy="63.4" r="5" data-tip="{&quot;n&quot;: &quot;rust-iouring-rkkautsar&quot;, &quot;d&quot;: &quot;Rust (io_uring, SQLite B-tree reads)&quot;, &quot;u&quot;: 300000, &quot;s&quot;: &quot;Hand-rolled io_uring&quot;}"/>
-<circle class="dot s3" cx="859.5" cy="81.4" r="5" data-tip="{&quot;n&quot;: &quot;rust-native-scooter1337&quot;, &quot;d&quot;: &quot;Rust (io_uring, SQLite B-tree reads)&quot;, &quot;u&quot;: 290000, &quot;s&quot;: &quot;Hand-rolled io_uring&quot;}"/>
-<circle class="dot s3" cx="808.5" cy="60.6" r="5" data-tip="{&quot;n&quot;: &quot;rust-iouring-tbsvttr&quot;, &quot;d&quot;: &quot;Rust (io_uring, SQLite B-tree reads)&quot;, &quot;u&quot;: 270000, &quot;s&quot;: &quot;Hand-rolled io_uring&quot;}"/>
-<circle class="dot s3" cx="793.1999999999999" cy="77.3" r="5" data-tip="{&quot;n&quot;: &quot;rust-epoll-scooter1337&quot;, &quot;d&quot;: &quot;Rust (io_uring)&quot;, &quot;u&quot;: 264000, &quot;s&quot;: &quot;Hand-rolled io_uring&quot;}"/>
-<circle class="dot s3" cx="757.5" cy="71.2" r="5" data-tip="{&quot;n&quot;: &quot;rust-iouring-not-my-segfault&quot;, &quot;d&quot;: &quot;Rust (io_uring, SQLite B-tree reads)&quot;, &quot;u&quot;: 250000, &quot;s&quot;: &quot;Hand-rolled io_uring&quot;}"/>
-<circle class="dot s3" cx="706.5" cy="60.1" r="5" data-tip="{&quot;n&quot;: &quot;rust-native-M3M0KA&quot;, &quot;d&quot;: &quot;Rust (no crates, epoll/io_uring, 5 worker processes, SQLite B-tree reads)&quot;, &quot;u&quot;: 230000, &quot;s&quot;: &quot;Hand-rolled io_uring&quot;}"/>
-<circle class="dot s3" cx="426.0" cy="76.3" r="5" data-tip="{&quot;n&quot;: &quot;rust-iouring-unorig-username&quot;, &quot;d&quot;: &quot;Rust (io_uring)&quot;, &quot;u&quot;: 120000, &quot;s&quot;: &quot;Hand-rolled io_uring&quot;}"/>
-<circle class="dot s1" cx="313.79999999999995" cy="59.3" r="5" data-tip="{&quot;n&quot;: &quot;rust-axum-tbsvttr&quot;, &quot;d&quot;: &quot;Rust (Axum)&quot;, &quot;u&quot;: 76000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="301.04999999999995" cy="73.6" r="5" data-tip="{&quot;n&quot;: &quot;rust-axum-mjc&quot;, &quot;d&quot;: &quot;Rust (Axum)&quot;, &quot;u&quot;: 71000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="301.04999999999995" cy="60.5" r="5" data-tip="{&quot;n&quot;: &quot;rust-axum-connorw-dev&quot;, &quot;d&quot;: &quot;Rust (Axum)&quot;, &quot;u&quot;: 71000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="301.04999999999995" cy="61.3" r="5" data-tip="{&quot;n&quot;: &quot;rust-mqbridge-marcomq&quot;, &quot;d&quot;: &quot;Rust (mq-bridge, sqlx SQLite)&quot;, &quot;u&quot;: 71000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="244.95" cy="73.3" r="5" data-tip="{&quot;n&quot;: &quot;rust-hyper-dannie203&quot;, &quot;d&quot;: &quot;Rust (hyper)&quot;, &quot;u&quot;: 49000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<text class="label" x="108" y="177.0" text-anchor="end">Go</text><line class="whisker" x1="181.2" x2="823.8000000000001" y1="172.0" y2="172.0"/><rect class="box" x="278.1" y="146.0" width="243.52499999999998" height="52" rx="4"/><line class="median" x1="301.04999999999995" x2="301.04999999999995" y1="146.0" y2="198.0"/><path class="mean" d="M406.67884615384617,139.0 l6,-7 h-12 z"/>
-<circle class="dot s3" cx="823.8000000000001" cy="183.8" r="5" data-tip="{&quot;n&quot;: &quot;go-iouring-huykn&quot;, &quot;d&quot;: &quot;Go (io_uring, SQLite B-tree reads)&quot;, &quot;u&quot;: 276000, &quot;s&quot;: &quot;Hand-rolled io_uring&quot;}"/>
-<circle class="dot s3" cx="808.5" cy="158.5" r="5" data-tip="{&quot;n&quot;: &quot;go-iouring-trungdlp&quot;, &quot;d&quot;: &quot;Go (io_uring, cgo SQLite B-tree reads)&quot;, &quot;u&quot;: 270000, &quot;s&quot;: &quot;Hand-rolled io_uring&quot;}"/>
-<circle class="dot s3" cx="808.5" cy="162.0" r="5" data-tip="{&quot;n&quot;: &quot;go-iouring-davidefrageri&quot;, &quot;d&quot;: &quot;Go (io_uring, cgo SQLite B-tree reads)&quot;, &quot;u&quot;: 270000, &quot;s&quot;: &quot;Hand-rolled io_uring&quot;}"/>
-<circle class="dot s3" cx="650.4" cy="176.6" r="5" data-tip="{&quot;n&quot;: &quot;go-iouring-quananh2503&quot;, &quot;d&quot;: &quot;Go (io_uring, cgo SQLite B-tree reads)&quot;, &quot;u&quot;: 208000, &quot;s&quot;: &quot;Hand-rolled io_uring&quot;}"/>
-<circle class="dot s2" cx="591.75" cy="188.1" r="5" data-tip="{&quot;n&quot;: &quot;go-epoll-MegaPanchamZ&quot;, &quot;d&quot;: &quot;Go (raw epoll)&quot;, &quot;u&quot;: 185000, &quot;s&quot;: &quot;Hand-rolled epoll&quot;}"/>
-<circle class="dot s2" cx="566.25" cy="174.8" r="5" data-tip="{&quot;n&quot;: &quot;go-epoll-kaikegm&quot;, &quot;d&quot;: &quot;Go (raw epoll, cgo SQLite)&quot;, &quot;u&quot;: 175000, &quot;s&quot;: &quot;Hand-rolled epoll&quot;}"/>
-<circle class="dot s2" cx="540.75" cy="168.3" r="5" data-tip="{&quot;n&quot;: &quot;go-epoll-unorig-username&quot;, &quot;d&quot;: &quot;Go (raw epoll, cgo SQLite)&quot;, &quot;u&quot;: 165000, &quot;s&quot;: &quot;Hand-rolled epoll&quot;}"/>
-<circle class="dot s2" cx="464.25" cy="189.1" r="5" data-tip="{&quot;n&quot;: &quot;go-epoll-brady1408&quot;, &quot;d&quot;: &quot;Go (raw epoll, cgo SQLite)&quot;, &quot;u&quot;: 135000, &quot;s&quot;: &quot;Hand-rolled epoll&quot;}"/>
-<circle class="dot s3" cx="446.40000000000003" cy="155.7" r="5" data-tip="{&quot;n&quot;: &quot;go-epoll-champ3oy&quot;, &quot;d&quot;: &quot;Go (io_uring)&quot;, &quot;u&quot;: 128000, &quot;s&quot;: &quot;Hand-rolled io_uring&quot;}"/>
-<circle class="dot s2" cx="438.75" cy="184.9" r="5" data-tip="{&quot;n&quot;: &quot;go-epoll-Antheurus&quot;, &quot;d&quot;: &quot;Go (raw epoll, 3 processes)&quot;, &quot;u&quot;: 125000, &quot;s&quot;: &quot;Hand-rolled epoll&quot;}"/>
-<circle class="dot s3" cx="438.75" cy="164.4" r="5" data-tip="{&quot;n&quot;: &quot;go-lowlevel-janso123&quot;, &quot;d&quot;: &quot;Go (io_uring, PGO + ThinLTO)&quot;, &quot;u&quot;: 125000, &quot;s&quot;: &quot;Hand-rolled io_uring&quot;}"/>
-<circle class="dot s1" cx="344.4" cy="159.2" r="5" data-tip="{&quot;n&quot;: &quot;go-gnet-kaikegm&quot;, &quot;d&quot;: &quot;Go (gnet)&quot;, &quot;u&quot;: 88000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="301.04999999999995" cy="158.2" r="5" data-tip="{&quot;n&quot;: &quot;go-fib-sirkostya009&quot;, &quot;d&quot;: &quot;Go (fib, epoll)&quot;, &quot;u&quot;: 71000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s2" cx="301.04999999999995" cy="165.1" r="5" data-tip="{&quot;n&quot;: &quot;go-stdlib-vkrishna03&quot;, &quot;d&quot;: &quot;Go (stdlib, epoll)&quot;, &quot;u&quot;: 71000, &quot;s&quot;: &quot;Hand-rolled epoll&quot;}"/>
-<circle class="dot s2" cx="301.04999999999995" cy="183.4" r="5" data-tip="{&quot;n&quot;: &quot;go-epoll-damianoneill&quot;, &quot;d&quot;: &quot;Go (raw epoll)&quot;, &quot;u&quot;: 71000, &quot;s&quot;: &quot;Hand-rolled epoll&quot;}"/>
-<circle class="dot s2" cx="301.04999999999995" cy="160.5" r="5" data-tip="{&quot;n&quot;: &quot;go-nethttp-mattn-vedic&quot;, &quot;d&quot;: &quot;Go (raw epoll, cgo SQLite)&quot;, &quot;u&quot;: 71000, &quot;s&quot;: &quot;Hand-rolled epoll&quot;}"/>
-<circle class="dot s1" cx="285.75" cy="174.9" r="5" data-tip="{&quot;n&quot;: &quot;go-gnet-Haris0059&quot;, &quot;d&quot;: &quot;Go (gnet)&quot;, &quot;u&quot;: 65000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="285.75" cy="177.0" r="5" data-tip="{&quot;n&quot;: &quot;go-fasthttp-b3nhard&quot;, &quot;d&quot;: &quot;Go (fasthttp, cgo SQLite)&quot;, &quot;u&quot;: 65000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="285.75" cy="167.4" r="5" data-tip="{&quot;n&quot;: &quot;go-fasthttp-savak1990&quot;, &quot;d&quot;: &quot;Go (fasthttp, cgo SQLite)&quot;, &quot;u&quot;: 65000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="275.54999999999995" cy="173.7" r="5" data-tip="{&quot;n&quot;: &quot;go-fasthttp-riyaz-ali&quot;, &quot;d&quot;: &quot;Go (fasthttp, cgo SQLite)&quot;, &quot;u&quot;: 61000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="260.25" cy="156.3" r="5" data-tip="{&quot;n&quot;: &quot;go-nethttp-fi5HiE&quot;, &quot;d&quot;: &quot;Go (net/http)&quot;, &quot;u&quot;: 55000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="255.15" cy="156.1" r="5" data-tip="{&quot;n&quot;: &quot;go-nethttp-tbsvttr&quot;, &quot;d&quot;: &quot;Go (net/http)&quot;, &quot;u&quot;: 53000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="234.75" cy="161.4" r="5" data-tip="{&quot;n&quot;: &quot;go-nethttp-NaveedZahoorKhan&quot;, &quot;d&quot;: &quot;Go (net/http, cgo SQLite)&quot;, &quot;u&quot;: 45000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s3" cx="193.95" cy="178.5" r="5" data-tip="{&quot;n&quot;: &quot;go-iouring-pmatteo&quot;, &quot;d&quot;: &quot;Go (io_uring, PGO)&quot;, &quot;u&quot;: 29000, &quot;s&quot;: &quot;Hand-rolled io_uring&quot;}"/>
-<circle class="dot s1" cx="188.85000000000002" cy="169.4" r="5" data-tip="{&quot;n&quot;: &quot;go-gin-lincolng4&quot;, &quot;d&quot;: &quot;Go (Gin)&quot;, &quot;u&quot;: 27000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1 nginx" cx="181.2" cy="165.3" r="5" data-tip="{&quot;n&quot;: &quot;jww-fiber&quot;, &quot;d&quot;: &quot;Go (Fiber, fasthttp), behind Nginx&quot;, &quot;u&quot;: 24000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<text class="label" x="108" y="273.0" text-anchor="end">TypeScript/JS</text><line class="whisker" x1="178.65" x2="367.35" y1="268.0" y2="268.0"/><rect class="box" x="265.35" y="242.0" width="35.69999999999993" height="52" rx="4"/><line class="median" x1="285.75" x2="285.75" y1="242.0" y2="294.0"/><path class="mean" d="M284.5909090909091,235.0 l6,-7 h-12 z"/>
-<circle class="dot s1" cx="367.35" cy="271.1" r="5" data-tip="{&quot;n&quot;: &quot;node-uwebsockets-zahidcakici&quot;, &quot;d&quot;: &quot;Node (uWebSockets)&quot;, &quot;u&quot;: 97000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="349.5" cy="266.3" r="5" data-tip="{&quot;n&quot;: &quot;typescript-bun-xxmohamed012&quot;, &quot;d&quot;: &quot;Bun&quot;, &quot;u&quot;: 90000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="301.04999999999995" cy="260.8" r="5" data-tip="{&quot;n&quot;: &quot;typescript-deno-JakeAve&quot;, &quot;d&quot;: &quot;Deno&quot;, &quot;u&quot;: 71000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="301.04999999999995" cy="278.6" r="5" data-tip="{&quot;n&quot;: &quot;bun-yatta-psrockstar098&quot;, &quot;d&quot;: &quot;Bun (Yatta JS, bun:sqlite)&quot;, &quot;u&quot;: 71000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="301.04999999999995" cy="275.2" r="5" data-tip="{&quot;n&quot;: &quot;typescript-tinyjs-animuni-express&quot;, &quot;d&quot;: &quot;TypeScript (TinyJS on Bun)&quot;, &quot;u&quot;: 71000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="285.75" cy="258.8" r="5" data-tip="{&quot;n&quot;: &quot;node-net-barrard&quot;, &quot;d&quot;: &quot;Node (node:net, node:sqlite)&quot;, &quot;u&quot;: 65000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="283.20000000000005" cy="270.7" r="5" data-tip="{&quot;n&quot;: &quot;bun-elysia-shashishsoni&quot;, &quot;d&quot;: &quot;Bun (Elysia)&quot;, &quot;u&quot;: 64000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="265.35" cy="268.9" r="5" data-tip="{&quot;n&quot;: &quot;typescript-bun-tbsvttr&quot;, &quot;d&quot;: &quot;Bun&quot;, &quot;u&quot;: 57000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="265.35" cy="281.5" r="5" data-tip="{&quot;n&quot;: &quot;typescript-fastify-melroy89&quot;, &quot;d&quot;: &quot;TypeScript (Fastify, Node)&quot;, &quot;u&quot;: 57000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="232.2" cy="276.3" r="5" data-tip="{&quot;n&quot;: &quot;node-fastify-gmr458&quot;, &quot;d&quot;: &quot;TypeScript (Fastify, Node)&quot;, &quot;u&quot;: 44000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="178.65" cy="260.4" r="5" data-tip="{&quot;n&quot;: &quot;typescript-effect-SeeThruHead&quot;, &quot;d&quot;: &quot;TypeScript (Effect, Node)&quot;, &quot;u&quot;: 23000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<text class="label" x="108" y="369.0" text-anchor="end">Python</text><line class="whisker" x1="158.25" x2="515.25" y1="364.0" y2="364.0"/><rect class="box" x="236.66250000000002" y="338.0" width="71.39999999999998" height="52" rx="4"/><line class="median" x1="266.625" x2="266.625" y1="338.0" y2="390.0"/><path class="mean" d="M280.395,331.0 l6,-7 h-12 z"/>
-<circle class="dot s3" cx="515.25" cy="381.3" r="5" data-tip="{&quot;n&quot;: &quot;python-pypy-iouring-kiwamizamurai&quot;, &quot;d&quot;: &quot;PyPy (io_uring, SQLite B-tree reads)&quot;, &quot;u&quot;: 155000, &quot;s&quot;: &quot;Hand-rolled io_uring&quot;}"/>
-<circle class="dot s2" cx="349.5" cy="350.3" r="5" data-tip="{&quot;n&quot;: &quot;python-pypy-epoll-pranavds-codes&quot;, &quot;d&quot;: &quot;PyPy (epoll)&quot;, &quot;u&quot;: 90000, &quot;s&quot;: &quot;Hand-rolled epoll&quot;}"/>
-<circle class="dot s1" cx="311.25" cy="361.1" r="5" data-tip="{&quot;n&quot;: &quot;python-stdlib-shawal-mbalire&quot;, &quot;d&quot;: &quot;Python (stdlib, PGO CPython)&quot;, &quot;u&quot;: 75000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="298.5" cy="373.3" r="5" data-tip="{&quot;n&quot;: &quot;python-fastapi-granian-shawal-mbalire&quot;, &quot;d&quot;: &quot;Python (FastAPI, Granian)&quot;, &quot;u&quot;: 70000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="278.1" cy="351.5" r="5" data-tip="{&quot;n&quot;: &quot;pypy-twisted-perkinslr&quot;, &quot;d&quot;: &quot;PyPy (Twisted)&quot;, &quot;u&quot;: 62000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="255.15" cy="363.6" r="5" data-tip="{&quot;n&quot;: &quot;python-pyrustapi-rajboopathiking&quot;, &quot;d&quot;: &quot;Python (PyRustAPI, Rust/Hyper core)&quot;, &quot;u&quot;: 53000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="242.39999999999998" cy="347.4" r="5" data-tip="{&quot;n&quot;: &quot;python-fastapi-tejasnafde&quot;, &quot;d&quot;: &quot;Python (FastAPI)&quot;, &quot;u&quot;: 48000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="234.75" cy="370.1" r="5" data-tip="{&quot;n&quot;: &quot;python-granian-tbsvttr&quot;, &quot;d&quot;: &quot;Python (Granian)&quot;, &quot;u&quot;: 45000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1" cx="160.8" cy="373.5" r="5" data-tip="{&quot;n&quot;: &quot;python-litestar-przwr&quot;, &quot;d&quot;: &quot;Python (Litestar)&quot;, &quot;u&quot;: 16000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-<circle class="dot s1 nginx" cx="158.25" cy="366.6" r="5" data-tip="{&quot;n&quot;: &quot;python-fastapi-still-rollin&quot;, &quot;d&quot;: &quot;Python (FastAPI, uvicorn), behind Nginx&quot;, &quot;u&quot;: 15000, &quot;s&quot;: &quot;Framework or runtime server&quot;}"/>
-</svg>
-<details open><summary>Median by language and strategy</summary><table><tr><th></th><th>Framework or runtime server</th><th>Hand-rolled epoll</th><th>Hand-rolled io_uring</th></tr><tr><td>Rust</td><td>71k <span class="muted">(n=5)</span></td><td>–</td><td>267k <span class="muted">(n=8)</span></td></tr><tr><td>Go</td><td>61k <span class="muted">(n=11)</span></td><td>130k <span class="muted">(n=8)</span></td><td>208k <span class="muted">(n=7)</span></td></tr><tr><td>TypeScript/JS</td><td>65k <span class="muted">(n=11)</span></td><td>–</td><td>–</td></tr><tr><td>Python</td><td>50k <span class="muted">(n=8)</span></td><td>90k <span class="muted">(n=1)</span></td><td>155k <span class="muted">(n=1)</span></td></tr></table></details>
-<details><summary>Table view: by language</summary><table><tr><th></th><th>n</th><th>min</th><th>Q1</th><th>median</th><th>mean</th><th>Q3</th><th>max</th></tr><tr><td>Rust</td><td>13</td><td>49k</td><td>71k</td><td>230k</td><td>182k</td><td>270k</td><td>310k</td></tr><tr><td>Go</td><td>26</td><td>24k</td><td>62k</td><td>71k</td><td>112k</td><td>158k</td><td>276k</td></tr><tr><td>TypeScript/JS</td><td>11</td><td>23k</td><td>57k</td><td>65k</td><td>65k</td><td>71k</td><td>97k</td></tr><tr><td>Python</td><td>10</td><td>15k</td><td>46k</td><td>58k</td><td>63k</td><td>74k</td><td>155k</td></tr></table></details>
-<details><summary>Table view: by strategy</summary><table><tr><th></th><th>n</th><th>min</th><th>Q1</th><th>median</th><th>mean</th><th>Q3</th><th>max</th></tr><tr><td>Framework or runtime server</td><td>35</td><td>15k</td><td>48k</td><td>64k</td><td>59k</td><td>71k</td><td>97k</td></tr><tr><td>Hand-rolled epoll</td><td>9</td><td>71k</td><td>71k</td><td>125k</td><td>121k</td><td>165k</td><td>185k</td></tr><tr><td>Hand-rolled io_uring</td><td>16</td><td>29k</td><td>148k</td><td>257k</td><td>218k</td><td>272k</td><td>310k</td></tr></table></details>
-<p>Source: upstream LEADERBOARD.md. "Spread explained" is one-way ANOVA η² on users held. Built by docs/charts/build_chart.py.</p>
+
+<div class="main">
+ <div><div class="legend" id="legend"></div><div id="chart"></div></div>
+ <aside class="side"><h2>Observations</h2><div id="tiles"></div><ul id="notes"></ul></aside>
+</div>
+
+<section><h2>Data</h2>
+ <div class="tables" id="tables"></div>
+ <div class="scroll" id="entries"></div>
+</section>
+
+<section class="method"><h2>Method and provenance</h2><ul id="method"></ul></section>
 <div id="tip"></div>
-</div>
+</div></div>
 <script>
-const tip = document.getElementById('tip');
-document.querySelectorAll('.dot[data-tip]').forEach(d => {
-  d.addEventListener('mousemove', e => {
-    const t = JSON.parse(d.dataset.tip);
-    tip.innerHTML = `<b>${t.n}</b><br>${t.u.toLocaleString()} users<br><span class="muted">${t.d}<br>${t.s}</span>`;
-    tip.style.display = 'block'; tip.style.left = (e.clientX + 14) + 'px'; tip.style.top = (e.clientY + 14) + 'px';
+const DATA = {"rows": [{"name": "rust-iouring-kensac", "pr": "#264", "desc": "Rust (io_uring, SQLite B-tree reads)", "lang": "Rust", "users": 310000, "strategy": "Hand-rolled io_uring", "nginx": false, "reqs": 29284.0, "p95": 62.0, "p99": 190.0, "err": 0.0, "cpu": 82.0, "us": 25.0, "ram": 1114.0, "scored": "2026-11-02"}, {"name": "rust-iouring-rkkautsar", "pr": "#355", "desc": "Rust (io_uring, SQLite B-tree reads)", "lang": "Rust", "users": 300000, "strategy": "Hand-rolled io_uring", "nginx": false, "reqs": 28417.0, "p95": 107.7, "p99": 345.0, "err": 0.0, "cpu": 96.0, "us": 30.0, "ram": 1159.0, "scored": "2026-11-09"}, {"name": "rust-native-scooter1337", "pr": "#267", "desc": "Rust (io_uring, SQLite B-tree reads)", "lang": "Rust", "users": 290000, "strategy": "Hand-rolled io_uring", "nginx": false, "reqs": 27580.0, "p95": 26.5, "p99": 514.0, "err": 0.0, "cpu": 80.0, "us": 26.0, "ram": 1035.0, "scored": "2026-11-02"}, {"name": "go-iouring-huykn", "pr": "#369", "desc": "Go (io_uring, SQLite B-tree reads)", "lang": "Go", "users": 276000, "strategy": "Hand-rolled io_uring", "nginx": false, "reqs": 26338.0, "p95": 95.6, "p99": 578.8, "err": 0.0, "cpu": 93.0, "us": 32.0, "ram": 933.0, "scored": "2026-11-09"}, {"name": "rust-iouring-tbsvttr", "pr": "#323", "desc": "Rust (io_uring, SQLite B-tree reads)", "lang": "Rust", "users": 270000, "strategy": "Hand-rolled io_uring", "nginx": false, "reqs": 25818.0, "p95": 97.5, "p99": 294.2, "err": 0.0, "cpu": 81.0, "us": 28.0, "ram": 1307.0, "scored": "2026-11-05"}, {"name": "go-iouring-trungdlp", "pr": "#343", "desc": "Go (io_uring, cgo SQLite B-tree reads)", "lang": "Go", "users": 270000, "strategy": "Hand-rolled io_uring", "nginx": false, "reqs": 25841.0, "p95": 99.5, "p99": 246.0, "err": 0.0, "cpu": 81.0, "us": 28.0, "ram": 736.0, "scored": "2026-11-07"}, {"name": "go-iouring-davidefrageri", "pr": "#354", "desc": "Go (io_uring, cgo SQLite B-tree reads)", "lang": "Go", "users": 270000, "strategy": "Hand-rolled io_uring", "nginx": false, "reqs": 25841.0, "p95": 62.9, "p99": 328.3, "err": 0.0, "cpu": 78.0, "us": 27.0, "ram": 1214.0, "scored": "2026-11-08"}, {"name": "rust-epoll-scooter1337", "pr": "#82", "desc": "Rust (io_uring)", "lang": "Rust", "users": 264000, "strategy": "Hand-rolled io_uring", "nginx": false, "reqs": 25147.0, "p95": 259.0, "p99": 499.0, "err": 0.0, "cpu": 84.0, "us": 30.0, "ram": 630.0, "scored": "2026-10-21"}, {"name": "rust-iouring-not-my-segfault", "pr": "#401", "desc": "Rust (io_uring, SQLite B-tree reads)", "lang": "Rust", "users": 250000, "strategy": "Hand-rolled io_uring", "nginx": false, "reqs": 24071.0, "p95": 138.1, "p99": 678.7, "err": 0.0, "cpu": 79.0, "us": 30.0, "ram": 1297.0, "scored": "2026-11-12"}, {"name": "rust-native-M3M0KA", "pr": "#265", "desc": "Rust (no crates, epoll/io_uring, 5 worker processes, SQLite B-tree reads)", "lang": "Rust", "users": 230000, "strategy": "Hand-rolled io_uring", "nginx": false, "reqs": 22304.0, "p95": 150.0, "p99": 352.0, "err": 0.0, "cpu": 90.0, "us": 37.0, "ram": 1350.0, "scored": "2026-11-02"}, {"name": "go-iouring-quananh2503", "pr": "#327", "desc": "Go (io_uring, cgo SQLite B-tree reads)", "lang": "Go", "users": 208000, "strategy": "Hand-rolled io_uring", "nginx": false, "reqs": 20388.0, "p95": 15.2, "p99": 165.2, "err": 0.0, "cpu": 91.0, "us": 41.0, "ram": 1118.0, "scored": "2026-11-06"}, {"name": "go-epoll-MegaPanchamZ", "pr": "#144", "desc": "Go (raw epoll)", "lang": "Go", "users": 185000, "strategy": "Hand-rolled epoll", "nginx": false, "reqs": 18086.0, "p95": 288.0, "p99": 479.0, "err": 0.0, "cpu": 99.0, "us": 51.0, "ram": 1286.0, "scored": "2026-10-28"}, {"name": "go-epoll-kaikegm", "pr": "#151", "desc": "Go (raw epoll, cgo SQLite)", "lang": "Go", "users": 175000, "strategy": "Hand-rolled epoll", "nginx": false, "reqs": 16616.0, "p95": 37.0, "p99": 253.0, "err": 0.61, "cpu": 98.0, "us": 55.0, "ram": 749.0, "scored": "2026-10-28"}, {"name": "go-epoll-unorig-username", "pr": "#186", "desc": "Go (raw epoll, cgo SQLite)", "lang": "Go", "users": 165000, "strategy": "Hand-rolled epoll", "nginx": false, "reqs": 16020.0, "p95": 479.0, "p99": 952.0, "err": 0.0, "cpu": 97.0, "us": 56.0, "ram": 665.0, "scored": "2026-10-29"}, {"name": "python-pypy-iouring-kiwamizamurai", "pr": "#284", "desc": "PyPy (io_uring, SQLite B-tree reads)", "lang": "Python", "users": 155000, "strategy": "Hand-rolled io_uring", "nginx": false, "reqs": 15201.0, "p95": 120.0, "p99": 277.0, "err": 0.0, "cpu": 80.0, "us": 49.0, "ram": 525.0, "scored": "2026-11-03"}, {"name": "go-epoll-brady1408", "pr": "#111", "desc": "Go (raw epoll, cgo SQLite)", "lang": "Go", "users": 135000, "strategy": "Hand-rolled epoll", "nginx": false, "reqs": 13169.0, "p95": 366.0, "p99": 962.0, "err": 0.0, "cpu": 100.0, "us": 70.0, "ram": 296.0, "scored": "2026-10-27"}, {"name": "go-epoll-champ3oy", "pr": "#76", "desc": "Go (io_uring)", "lang": "Go", "users": 128000, "strategy": "Hand-rolled io_uring", "nginx": false, "reqs": 12604.0, "p95": 3.0, "p99": 23.0, "err": 0.0, "cpu": 77.0, "us": 57.0, "ram": 385.0, "scored": "2026-10-21"}, {"name": "go-epoll-Antheurus", "pr": "#65", "desc": "Go (raw epoll, 3 processes)", "lang": "Go", "users": 125000, "strategy": "Hand-rolled epoll", "nginx": false, "reqs": 12274.0, "p95": 116.0, "p99": 665.0, "err": 0.0, "cpu": 98.0, "us": 74.0, "ram": 292.0, "scored": "2026-10-27"}, {"name": "go-lowlevel-janso123", "pr": "#91", "desc": "Go (io_uring, PGO + ThinLTO)", "lang": "Go", "users": 125000, "strategy": "Hand-rolled io_uring", "nginx": false, "reqs": 12284.0, "p95": 68.0, "p99": 261.0, "err": 0.0, "cpu": 95.0, "us": 72.0, "ram": 500.0, "scored": "2026-10-27"}, {"name": "rust-iouring-unorig-username", "pr": "#188", "desc": "Rust (io_uring)", "lang": "Rust", "users": 120000, "strategy": "Hand-rolled io_uring", "nginx": false, "reqs": 11799.0, "p95": 12.0, "p99": 144.0, "err": 0.0, "cpu": 46.0, "us": 36.0, "ram": 543.0, "scored": "2026-10-29"}, {"name": "node-uwebsockets-zahidcakici", "pr": "#102", "desc": "Node (uWebSockets)", "lang": "TypeScript/JS", "users": 97000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 9471.0, "p95": 264.0, "p99": 484.0, "err": 0.0, "cpu": 92.0, "us": 90.0, "ram": 336.0, "scored": "2026-10-21"}, {"name": "typescript-bun-xxmohamed012", "pr": "#3", "desc": "Bun", "lang": "TypeScript/JS", "users": 90000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 8826.0, "p95": 140.0, "p99": 359.0, "err": 0.0, "cpu": 83.0, "us": 87.0, "ram": 301.0, "scored": "2026-10-21"}, {"name": "python-pypy-epoll-pranavds-codes", "pr": "#84", "desc": "PyPy (epoll)", "lang": "Python", "users": 90000, "strategy": "Hand-rolled epoll", "nginx": false, "reqs": 8801.0, "p95": 280.0, "p99": 474.0, "err": 0.0, "cpu": 89.0, "us": 94.0, "ram": 270.0, "scored": "2026-10-21"}, {"name": "go-gnet-kaikegm", "pr": "#180", "desc": "Go (gnet)", "lang": "Go", "users": 88000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 8633.0, "p95": 236.0, "p99": 363.0, "err": 0.0, "cpu": 77.0, "us": 83.0, "ram": 313.0, "scored": "2026-10-29"}, {"name": "rust-axum-tbsvttr", "pr": "#17", "desc": "Rust (Axum)", "lang": "Rust", "users": 76000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 7434.0, "p95": 280.0, "p99": 551.0, "err": 0.0, "cpu": 85.0, "us": 106.0, "ram": 1118.0, "scored": "2026-10-26"}, {"name": "python-stdlib-shawal-mbalire", "pr": "#118", "desc": "Python (stdlib, PGO CPython)", "lang": "Python", "users": 75000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 7327.0, "p95": 342.0, "p99": 514.0, "err": 0.0, "cpu": 90.0, "us": 114.0, "ram": 326.0, "scored": "2026-10-27"}, {"name": "typescript-deno-JakeAve", "pr": "#119", "desc": "Deno", "lang": "TypeScript/JS", "users": 71000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 6558.0, "p95": 5.6, "p99": 13.0, "err": 0.93, "cpu": 47.0, "us": 67.0, "ram": 412.0, "scored": "2026-10-21"}, {"name": "go-fib-sirkostya009", "pr": "#34", "desc": "Go (fib, epoll)", "lang": "Go", "users": 71000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 6552.0, "p95": 109.0, "p99": 248.0, "err": 0.93, "cpu": 61.0, "us": 87.0, "ram": 674.0, "scored": "2026-10-26"}, {"name": "go-stdlib-vkrishna03", "pr": "#44", "desc": "Go (stdlib, epoll)", "lang": "Go", "users": 71000, "strategy": "Hand-rolled epoll", "nginx": false, "reqs": 6547.0, "p95": 74.0, "p99": 251.0, "err": 0.93, "cpu": 38.0, "us": 54.0, "ram": 231.0, "scored": "2026-10-26"}, {"name": "go-epoll-damianoneill", "pr": "#52", "desc": "Go (raw epoll)", "lang": "Go", "users": 71000, "strategy": "Hand-rolled epoll", "nginx": false, "reqs": 6551.0, "p95": 50.0, "p99": 78.0, "err": 0.93, "cpu": 41.0, "us": 59.0, "ram": 157.0, "scored": "2026-10-26"}, {"name": "go-nethttp-mattn-vedic", "pr": "#100", "desc": "Go (raw epoll, cgo SQLite)", "lang": "Go", "users": 71000, "strategy": "Hand-rolled epoll", "nginx": false, "reqs": 6552.0, "p95": 36.0, "p99": 50.0, "err": 0.93, "cpu": 55.0, "us": 78.0, "ram": 332.0, "scored": "2026-10-27"}, {"name": "rust-axum-mjc", "pr": "#114", "desc": "Rust (Axum)", "lang": "Rust", "users": 71000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 6556.0, "p95": 2.2, "p99": 3.5, "err": 0.93, "cpu": 40.0, "us": 57.0, "ram": 1551.0, "scored": "2026-10-27"}, {"name": "rust-axum-connorw-dev", "pr": "#140", "desc": "Rust (Axum)", "lang": "Rust", "users": 71000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 6554.0, "p95": 6.1, "p99": 11.0, "err": 0.93, "cpu": 52.0, "us": 74.0, "ram": 1131.0, "scored": "2026-10-28"}, {"name": "bun-yatta-psrockstar098", "pr": "#179", "desc": "Bun (Yatta JS, bun:sqlite)", "lang": "TypeScript/JS", "users": 71000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 6545.0, "p95": 54.0, "p99": 133.0, "err": 0.93, "cpu": 91.0, "us": 130.0, "ram": 213.0, "scored": "2026-10-29"}, {"name": "rust-mqbridge-marcomq", "pr": "#253", "desc": "Rust (mq-bridge, sqlx SQLite)", "lang": "Rust", "users": 71000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 6548.0, "p95": 72.0, "p99": 106.0, "err": 0.93, "cpu": 76.0, "us": 109.0, "ram": 1409.0, "scored": "2026-11-01"}, {"name": "typescript-tinyjs-animuni-express", "pr": "#410", "desc": "TypeScript (TinyJS on Bun)", "lang": "TypeScript/JS", "users": 71000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 6534.0, "p95": 184.3, "p99": 524.0, "err": 0.93, "cpu": 92.0, "us": 132.0, "ram": 219.0, "scored": "2026-11-14"}, {"name": "python-fastapi-granian-shawal-mbalire", "pr": "#41", "desc": "Python (FastAPI, Granian)", "lang": "Python", "users": 70000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 6801.0, "p95": 465.0, "p99": 862.0, "err": 0.0, "cpu": 94.0, "us": 129.0, "ram": 1192.0, "scored": "2026-10-26"}, {"name": "go-gnet-Haris0059", "pr": "#38", "desc": "Go (gnet)", "lang": "Go", "users": 65000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 6396.0, "p95": 39.0, "p99": 54.0, "err": 0.0, "cpu": 42.0, "us": 61.0, "ram": 350.0, "scored": "2026-10-26"}, {"name": "go-fasthttp-b3nhard", "pr": "#56", "desc": "Go (fasthttp, cgo SQLite)", "lang": "Go", "users": 65000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 6399.0, "p95": 4.8, "p99": 19.0, "err": 0.0, "cpu": 77.0, "us": 112.0, "ram": 547.0, "scored": "2026-10-27"}, {"name": "node-net-barrard", "pr": "#78", "desc": "Node (node:net, node:sqlite)", "lang": "TypeScript/JS", "users": 65000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 6383.0, "p95": 133.0, "p99": 312.0, "err": 0.0, "cpu": 75.0, "us": 109.0, "ram": 483.0, "scored": "2026-10-28"}, {"name": "go-fasthttp-savak1990", "pr": "#106", "desc": "Go (fasthttp, cgo SQLite)", "lang": "Go", "users": 65000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 6397.0, "p95": 45.0, "p99": 66.0, "err": 0.0, "cpu": 66.0, "us": 96.0, "ram": 875.0, "scored": "2026-11-05"}, {"name": "bun-elysia-shashishsoni", "pr": "#59", "desc": "Bun (Elysia)", "lang": "TypeScript/JS", "users": 64000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 6300.0, "p95": 14.0, "p99": 75.0, "err": 0.0, "cpu": 89.0, "us": 131.0, "ram": 1507.0, "scored": "2026-10-27"}, {"name": "pypy-twisted-perkinslr", "pr": "#79", "desc": "PyPy (Twisted)", "lang": "Python", "users": 62000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 6017.0, "p95": 474.0, "p99": 757.0, "err": 0.0, "cpu": 73.0, "us": 113.0, "ram": 563.0, "scored": "2026-10-27"}, {"name": "go-fasthttp-riyaz-ali", "pr": "#344", "desc": "Go (fasthttp, cgo SQLite)", "lang": "Go", "users": 61000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 5984.0, "p95": 243.6, "p99": 836.5, "err": 0.0, "cpu": 79.0, "us": 123.0, "ram": 1162.0, "scored": "2026-11-07"}, {"name": "typescript-bun-tbsvttr", "pr": "#4", "desc": "Bun", "lang": "TypeScript/JS", "users": 57000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 5593.0, "p95": 103.0, "p99": 291.0, "err": 0.0, "cpu": 86.0, "us": 143.0, "ram": 301.0, "scored": "2026-10-25"}, {"name": "typescript-fastify-melroy89", "pr": "#51", "desc": "TypeScript (Fastify, Node)", "lang": "TypeScript/JS", "users": 57000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 5582.0, "p95": 212.0, "p99": 614.0, "err": 0.0, "cpu": 77.0, "us": 128.0, "ram": 1072.0, "scored": "2026-10-30"}, {"name": "go-nethttp-fi5HiE", "pr": "#99", "desc": "Go (net/http)", "lang": "Go", "users": 55000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 5382.0, "p95": 425.0, "p99": 679.0, "err": 0.0, "cpu": 90.0, "us": 156.0, "ram": 1465.0, "scored": "2026-10-21"}, {"name": "go-nethttp-tbsvttr", "pr": "#18", "desc": "Go (net/http)", "lang": "Go", "users": 53000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 5165.0, "p95": 374.0, "p99": 659.0, "err": 0.0, "cpu": 93.0, "us": 168.0, "ram": 624.0, "scored": "2026-10-26"}, {"name": "python-pyrustapi-rajboopathiking", "pr": "#147", "desc": "Python (PyRustAPI, Rust/Hyper core)", "lang": "Python", "users": 53000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 5185.0, "p95": 294.0, "p99": 429.0, "err": 0.0, "cpu": 90.0, "us": 162.0, "ram": 1232.0, "scored": "2026-10-28"}, {"name": "rust-hyper-dannie203", "pr": "#178", "desc": "Rust (hyper)", "lang": "Rust", "users": 49000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 4820.0, "p95": 34.0, "p99": 370.0, "err": 0.0, "cpu": 86.0, "us": 166.0, "ram": 1254.0, "scored": "2026-11-04"}, {"name": "python-fastapi-tejasnafde", "pr": "#10", "desc": "Python (FastAPI)", "lang": "Python", "users": 48000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 4701.0, "p95": 303.0, "p99": 465.0, "err": 0.0, "cpu": 89.0, "us": 176.0, "ram": 583.0, "scored": "2026-10-21"}, {"name": "python-granian-tbsvttr", "pr": "#13", "desc": "Python (Granian)", "lang": "Python", "users": 45000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 4400.0, "p95": 202.0, "p99": 812.0, "err": 0.0, "cpu": 93.0, "us": 197.0, "ram": 709.0, "scored": "2026-10-26"}, {"name": "go-nethttp-NaveedZahoorKhan", "pr": "#129", "desc": "Go (net/http, cgo SQLite)", "lang": "Go", "users": 45000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 4429.0, "p95": 33.0, "p99": 303.0, "err": 0.0, "cpu": 67.0, "us": 141.0, "ram": 1507.0, "scored": "2026-10-28"}, {"name": "node-fastify-gmr458", "pr": "#61", "desc": "TypeScript (Fastify, Node)", "lang": "TypeScript/JS", "users": 44000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 4285.0, "p95": 489.0, "p99": 915.0, "err": 0.0, "cpu": 86.0, "us": 187.0, "ram": 812.0, "scored": "2026-10-27"}, {"name": "go-iouring-pmatteo", "pr": "#168", "desc": "Go (io_uring, PGO)", "lang": "Go", "users": 29000, "strategy": "Hand-rolled io_uring", "nginx": false, "reqs": 2857.0, "p95": 2.2, "p99": 42.0, "err": 0.0, "cpu": 21.0, "us": 68.0, "ram": 326.0, "scored": "2026-10-29"}, {"name": "go-gin-lincolng4", "pr": "#103", "desc": "Go (Gin)", "lang": "Go", "users": 27000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 2658.0, "p95": 1.2, "p99": 4.8, "err": 0.0, "cpu": 42.0, "us": 147.0, "ram": 1600.0, "scored": "2026-10-27"}, {"name": "jww-fiber", "pr": "#328", "desc": "Go (Fiber, fasthttp), behind Nginx", "lang": "Go", "users": 24000, "strategy": "Framework or runtime server", "nginx": true, "reqs": 2361.0, "p95": 28.4, "p99": 76.0, "err": 0.94, "cpu": 49.0, "us": 193.0, "ram": 85.0, "scored": "2026-11-05"}, {"name": "typescript-effect-SeeThruHead", "pr": "#49", "desc": "TypeScript (Effect, Node)", "lang": "TypeScript/JS", "users": 23000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 2229.0, "p95": 413.0, "p99": 765.0, "err": 0.0, "cpu": 96.0, "us": 399.0, "ram": 623.0, "scored": "2026-10-26"}, {"name": "python-litestar-przwr", "pr": "#23", "desc": "Python (Litestar)", "lang": "Python", "users": 16000, "strategy": "Framework or runtime server", "nginx": false, "reqs": 1569.0, "p95": 259.0, "p99": 788.0, "err": 0.0, "cpu": 66.0, "us": 391.0, "ram": 256.0, "scored": "2026-10-26"}, {"name": "python-fastapi-still-rollin", "pr": "#461", "desc": "Python (FastAPI, uvicorn), behind Nginx", "lang": "Python", "users": 15000, "strategy": "Framework or runtime server", "nginx": true, "reqs": 1473.0, "p95": 49.1, "p99": 692.4, "err": 0.0, "cpu": 93.0, "us": 587.0, "ram": 112.0, "scored": "2026-11-15"}], "langs": ["Rust", "Go", "Python", "TypeScript/JS"], "strategies": ["Framework or runtime server", "Hand-rolled epoll", "Hand-rolled io_uring"], "asOf": "2026-11-15"};
+const METRICS = {
+  users: {label: 'Users held for 5 minutes', short: 'Users held', better: 'higher'},
+  reqs:  {label: 'Requests per second at that load', short: 'req/s', better: 'higher'},
+  us:    {label: 'Server CPU per request (µs)', short: 'µs/req', better: 'lower'},
+  cpu:   {label: 'Server CPU at that load (%)', short: 'CPU %', better: null},
+  ram:   {label: 'Server memory at that load (MB)', short: 'RAM MB', better: 'lower'},
+  p95:   {label: 'p95 latency at that load (ms)', short: 'p95 ms', better: 'lower'},
+};
+const DIMS = {
+  lang:     {label: 'Language', values: DATA.langs},
+  strategy: {label: 'Strategy', values: DATA.strategies},
+  nginx:    {label: 'Behind Nginx', values: ['Direct', 'Behind Nginx']},
+};
+// One note per metric, shown under the tiles. Users held is the score, so it carries the findings.
+const NOTES = {
+  users: ['With a framework, all four languages land within 1.4x of each other (medians 50k to 71k).',
+          'Hand-rolled io_uring is worth 3-4x in the same language: Rust Axum 71k against Rust io_uring 267k (median).',
+          'Breaking the 71k wall needs io_uring direct descriptors or retiring idle connections.',
+          'No TypeScript/JS entry has tried io_uring, so its ceiling is unknown, not low.'],
+  reqs:  ['Requests per second tracks users held: each simulated user sends about one request every 10 seconds.'],
+  us:    ['Measured at each entry\'s own passing load, so the loads differ between entries.',
+          'Cost per request rises with the number of open connections, so compare entries at similar users held.'],
+  cpu:   ['An entry that stops well below 100% CPU was stopped by something else, usually the open-file wall at 71k users.'],
+  ram:   ['Memory grows with the number of open connections, so higher scorers use more. Compare entries at similar users held.'],
+  p95:   ['Every scored run is under the 500 ms limit by definition. This shows how much room the entry had left.'],
+};
+const FD_CAP = 71000;
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const dimOf = (r, d) => d === 'nginx' ? DIMS.nginx.values[+r.nginx] : r[d];
+const fmt = v => v >= 10000 ? Math.round(v / 1000) + 'k' : v >= 1000 ? (v / 1000).toFixed(1) + 'k' : String(Math.round(v));
+const mean = xs => xs.reduce((a, b) => a + b, 0) / xs.length;
+
+function stats(xs) {  // quartiles by linear interpolation, the same as Python's "inclusive" method
+  const s = [...xs].sort((a, b) => a - b);
+  const q = p => { const i = (s.length - 1) * p, lo = Math.floor(i); return s[lo] + (s[Math.ceil(i)] - s[lo]) * (i - lo); };
+  return {n: s.length, min: s[0], q1: q(.25), median: q(.5), mean: mean(s), q3: q(.75), max: s[s.length - 1]};
+}
+function eta2(rows, dim, m) {  // one-way ANOVA: share of the variance that sits between the groups
+  const g = mean(rows.map(r => r[m])), groups = {};
+  for (const r of rows) (groups[dimOf(r, dim)] ??= []).push(r[m]);
+  const between = Object.values(groups).reduce((a, xs) => a + xs.length * (mean(xs) - g) ** 2, 0);
+  return between / rows.reduce((a, r) => a + (r[m] - g) ** 2, 0);
+}
+function niceMax(v) {  // axis end and tick step on a 1/2/5 grid
+  const raw = v / 8, p = 10 ** Math.floor(Math.log10(raw)), step = [1, 2, 5, 10].find(k => k * p >= raw) * p;
+  return {step, max: Math.ceil(v / step) * step};
+}
+function jitter(name) {  // stable per entry, so a dot keeps its height when the pickers change
+  let h = 7; for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return (h % 1000) / 1000 * 36 - 18;
+}
+
+function render() {
+  const cat = $('cat').value, col = $('col').value, m = $('met').value, M = METRICS[m];
+  const show = k => $('st-' + k).checked;
+  const rows = DATA.rows, groupOf = v => rows.filter(r => dimOf(r, cat) === v);
+  const sign = M.better === 'lower' ? 1 : -1;  // best row first
+  const cats = DIMS[cat].values.map(v => ({v, s: stats(groupOf(v).map(r => r[m]))})).sort((a, b) => sign * (a.s.median - b.s.median));
+  const cls = r => 'c' + (DIMS[col].values.indexOf(dimOf(r, col)) + 1);
+
+  // chart
+  const W = 700, LEFT = 118, RIGHT = 20, TOP = 30, ROW = 96, H = TOP + ROW * cats.length + 58;
+  const ax = niceMax(Math.max(...rows.map(r => r[m]))), x = v => LEFT + v / ax.max * (W - LEFT - RIGHT);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(M.label)} per entry, by ${DIMS[cat].label.toLowerCase()}">`;
+  for (let v = 0; v <= ax.max + 1e-9; v += ax.step)
+    svg += `<line class="grid" x1="${x(v)}" x2="${x(v)}" y1="${TOP}" y2="${H - 52}"/><text x="${x(v)}" y="${H - 34}" text-anchor="middle">${fmt(v)}</text>`;
+  svg += `<text x="${(LEFT + W - RIGHT) / 2}" y="${H - 10}" text-anchor="middle">${esc(M.label)}${M.better ? ` (${M.better} is better)` : ''} →</text>`;
+  if (m === 'users')
+    svg += `<line class="cap" x1="${x(FD_CAP)}" x2="${x(FD_CAP)}" y1="${TOP - 10}" y2="${H - 52}"/><text x="${x(FD_CAP) + 4}" y="${TOP - 14}">65,535 open-file limit ≈ 71k users</text>`;
+  cats.forEach(({v, s}, i) => {
+    const mid = TOP + ROW * i + ROW / 2;
+    svg += `<text class="label" x="${LEFT - 12}" y="${mid}" text-anchor="end">${esc(v.replace('Hand-rolled ', '').replace(' or runtime server', ''))}</text>`
+         + `<text x="${LEFT - 12}" y="${mid + 16}" text-anchor="end">n = ${s.n}</text>`;
+    if (show('range')) svg += `<line class="whisker" x1="${x(s.min)}" x2="${x(s.max)}" y1="${mid}" y2="${mid}"/>`;
+    if (show('box')) svg += `<rect class="box" x="${x(s.q1)}" y="${mid - 26}" width="${x(s.q3) - x(s.q1)}" height="52" rx="4"/>`;
+    if (show('median')) svg += `<line class="median" x1="${x(s.median)}" x2="${x(s.median)}" y1="${mid - 26}" y2="${mid + 26}"/>`;
+    if (show('mean')) svg += `<path class="mean" d="M${x(s.mean)},${mid - 28} l6,-8 h-12 z"/>`;
+    for (const r of groupOf(v))
+      svg += `<circle class="dot ${cls(r)}${r.nginx ? ' nginx' : ''}" tabindex="0" cx="${x(r[m])}" cy="${(mid + jitter(r.name)).toFixed(1)}" r="5" data-i="${rows.indexOf(r)}"/>`;
   });
-  d.addEventListener('mouseleave', () => tip.style.display = 'none');
-});
+  $('chart').innerHTML = svg + '</svg>';
+  $('legend').innerHTML = DIMS[col].values.map((v, i) =>
+    `<span><svg style="width:12px" viewBox="0 0 12 12"><circle class="dot c${i + 1}" cx="6" cy="6" r="5"/></svg>${esc(v)}</span>`).join('')
+    + '<span>▌median</span><span>▼ mean</span><span>○ behind Nginx</span>';
+
+  // observation tiles
+  const e = {strategy: eta2(rows, 'strategy', m), lang: eta2(rows, 'lang', m)};
+  const top = e.strategy >= e.lang ? 'strategy' : 'lang';
+  const pct = v => Math.round(v * 100) + '%', what = M.short.toLowerCase();
+  const best = cats[0], worst = cats[cats.length - 1], ratio = Math.max(best.s.median, worst.s.median) / Math.min(best.s.median, worst.s.median);
+  const tiles = ['strategy', 'lang'].map(d => [d === top ? 'good' : '', pct(e[d]),
+    `of the spread in ${what} is explained by ${DIMS[d].label.toLowerCase()}${d === top ? ': the bigger driver' : ''}`, d === top ? '✓ main driver' : '']);
+  tiles.push(['', ratio.toFixed(1) + 'x', `between the best and worst median: ${best.v} ${fmt(best.s.median)}, ${worst.v} ${fmt(worst.s.median)}`, '']);
+  if (m === 'users') {
+    const stuck = rows.filter(r => r.users === FD_CAP).length;
+    tiles.push(['bad', stuck + ' of ' + rows.length, 'entries stop at exactly 71k users: the open-file limit, not their language\'s limit', '! shared wall']);
+  } else {
+    const b = [...rows].sort((a, c) => sign * (a[m] - c[m]))[0];
+    tiles.push(['', fmt(b[m]), `${M.better === 'lower' ? 'lowest' : 'highest'} ${what}: ${b.name}`, '']);
+  }
+  $('tiles').innerHTML = tiles.map(([c, big, text, tag]) =>
+    `<div class="tile ${c}"><b>${esc(big)}${tag ? `<small>${esc(tag)}</small>` : ''}</b><span>${esc(text)}</span></div>`).join('');
+  $('notes').innerHTML = NOTES[m].map(t => `<li>${esc(t)}</li>`).join('');
+
+  // tables
+  const keys = ['n', 'min', 'q1', 'median', 'mean', 'q3', 'max'], cell = (k, v) => k === 'n' ? v : fmt(v);
+  let t = `<table><caption>${esc(M.short)}, by ${DIMS[cat].label.toLowerCase()}</caption><tr><th></th>${keys.map(k => `<th>${k === 'q1' ? 'Q1' : k === 'q3' ? 'Q3' : k}</th>`).join('')}</tr>`
+    + cats.map(({v, s}) => `<tr><td>${esc(v)}</td>${keys.map(k => `<td>${cell(k, s[k])}</td>`).join('')}</tr>`).join('') + '</table>';
+  if (col !== cat) {
+    t += `<table><caption>Median ${esc(M.short.toLowerCase())} by ${DIMS[cat].label.toLowerCase()} and ${DIMS[col].label.toLowerCase()} (number of entries)</caption><tr><th></th>${DIMS[col].values.map(v => `<th>${esc(v)}</th>`).join('')}</tr>`
+      + cats.map(({v}) => `<tr><td>${esc(v)}</td>` + DIMS[col].values.map(c => {
+          const xs = groupOf(v).filter(r => dimOf(r, col) === c).map(r => r[m]);
+          return `<td>${xs.length ? `${fmt(stats(xs).median)} <span class="muted">(${xs.length})</span>` : '–'}</td>`;
+        }).join('') + '</tr>').join('') + '</table>';
+  }
+  $('tables').innerHTML = t;
+  const mk = Object.keys(METRICS);
+  $('entries').innerHTML = `<table><tr><th>Entry</th><th class="l">Language</th><th class="l">Strategy</th><th class="l">Description</th>`
+    + mk.map(k => `<th class="${k === m ? 'on' : ''}">${esc(METRICS[k].short)}</th>`).join('') + '</tr>'
+    + [...rows].sort((a, b) => sign * (a[m] - b[m])).map(r => `<tr><td>${esc(r.name)}</td><td class="l">${esc(r.lang)}</td><td class="l">${esc(r.strategy)}</td><td class="l">${esc(r.desc)}</td>`
+      + mk.map(k => `<td class="${k === m ? 'on' : ''}">${Math.round(r[k]).toLocaleString('en-US')}</td>`).join('') + '</tr>').join('') + '</table>';
+}
+
+// tooltip: hover or keyboard focus on a dot
+const tip = $('tip');
+function showTip(d, px, py) {
+  const r = DATA.rows[d.dataset.i], m = $('met').value;
+  tip.innerHTML = `<b>${esc(r.name)}</b><br>${esc(METRICS[m].short)}: ${Math.round(r[m]).toLocaleString('en-US')}`
+    + (m === 'users' ? '' : `<br>Users held: ${r.users.toLocaleString('en-US')}`)
+    + `<br><span class="muted">${esc(r.desc)}<br>${esc(r.strategy)}</span>`;
+  tip.style.display = 'block';
+  tip.style.left = Math.min(px + 14, innerWidth - tip.offsetWidth - 8) + 'px'; tip.style.top = (py + 14) + 'px';
+}
+$('chart').addEventListener('mousemove', e => e.target.dataset.i ? showTip(e.target, e.clientX, e.clientY) : tip.style.display = 'none');
+$('chart').addEventListener('mouseleave', () => tip.style.display = 'none');
+$('chart').addEventListener('focusin', e => { if (e.target.dataset.i) { const b = e.target.getBoundingClientRect(); showTip(e.target, b.right, b.bottom); } });
+$('chart').addEventListener('focusout', () => tip.style.display = 'none');
+
+const opts = (o, keys) => keys.map(k => `<option value="${k}">${esc(o[k].label)}</option>`).join('');
+$('cat').innerHTML = opts(DIMS, ['lang', 'strategy']);
+$('col').innerHTML = opts(DIMS, ['strategy', 'lang', 'nginx']);
+$('met').innerHTML = opts(METRICS, Object.keys(METRICS));
+document.querySelector('.controls').addEventListener('change', render);
+$('sub').textContent = `Each dot is one of the ${DATA.rows.length} entries in Rust, Go, Python and TypeScript/JS on upstream's leaderboard. Pick how to group, colour and measure them.`;
+$('method').innerHTML = [
+  `Source: upstream's LEADERBOARD.md, entries scored up to ${DATA.asOf}. Rebuild with <code>python3 docs/charts/build_chart.py</code>.`,
+  'Machine: 1 vCPU, 2 GB RAM, with the load generated from separate machines. Every entry runs the same load test.',
+  'Score: the most simulated users held for 5 minutes with p95 under 500 ms, p99 under 1 s and under 1% errors. The other metrics are measured during that passing run.',
+  'Scope: Rust, Go, Python (CPython and PyPy) and TypeScript/JS (Node, Bun and Deno). Other languages on the leaderboard are left out.',
+  'Strategy comes from each entry\'s description: it names io_uring, or epoll, or neither (a framework or the runtime\'s own server).',
+  '"Spread explained" is one-way ANOVA η²: the share of the variance that sits between the groups. Language and strategy overlap, so the two shares do not add up to 100%.',
+  'Re-running the same code moves a score by 5-15%, so ignore gaps under about 10k users.',
+].map(t => `<li>${t}</li>`).join('');
+render();
 </script>
 </body></html>

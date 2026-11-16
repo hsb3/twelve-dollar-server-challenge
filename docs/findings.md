@@ -22,8 +22,9 @@ re-runs vary by 5-15%, so ignore gaps under about 10k users.
 
 ![Users held by language and strategy](img/score-by-language.png)
 
-Interactive version, with hover and tables: [`charts/score-by-language.html`](charts/score-by-language.html)
-(open it in a browser). Rebuild with `python3 docs/charts/build_chart.py`.
+Interactive report: [`charts/score-by-language.html`](charts/score-by-language.html) (open it in a
+browser). Pickers regroup the entries by language or strategy, recolour them, and switch the metric
+(users held, req/s, CPU per request, CPU %, memory, p95). The statistics and tables follow. Rebuild with `python3 docs/charts/build_chart.py`.
 
 **What the chart shows.** Each language's box is wide because its entries use different strategies,
 not because the language is unpredictable. Colour sorts the dots left to right in every row: blue
