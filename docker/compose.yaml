@@ -1,4 +1,4 @@
-# Isolated benchmark stack. Run it through docker/bench.sh; see docker/README.md.
+# Isolated benchmark stack. Run it through docker/bench.sh; see docs/benchmark-stack.md.
 name: twelve-dollar
 
 services:
@@ -74,6 +74,23 @@ services:
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/bench-runs.json
     volumes: [ "./grafana:/etc/grafana/provisioning:ro", "../results:/results:ro", "grafana-data:/var/lib/grafana" ]
     networks: [ viz ]   # not bench: it needs the internet for its plugin and a published port
+    profiles: [ viz ]
+
+  # Headless Chromium that screenshots the dashboard into docs/img (make screenshots).
+  shots:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM mcr.microsoft.com/playwright/python:v1.55.0-noble
+        RUN pip install --no-cache-dir --break-system-packages playwright==1.55.0
+    image: twelve-dollar-shots
+    volumes: [ "./screenshot.py:/screenshot.py:ro", "../docs/img:/out" ]
+    working_dir: /out
+    cpus: 2
+    mem_limit: 2g
+    pids_limit: 512
+    shm_size: 1g
+    networks: [ viz ]
     profiles: [ viz ]
 
 volumes:

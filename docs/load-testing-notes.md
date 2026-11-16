@@ -1,7 +1,7 @@
 # Notes for load-testing other servers
 
 Lessons from building this stack that apply to any server, not only this challenge's HTTP API. The
-stack itself is described in [`README.md`](README.md).
+stack itself is described in [`benchmark-stack.md`](benchmark-stack.md).
 
 ## Checklist for a new kind of server
 
@@ -36,6 +36,14 @@ stack itself is described in [`README.md`](README.md).
   addresses or run several generator containers.
 - **Untested levers.** `GOMEMLIMIT` in k6's environment should cap its Go heap. Turning off
   thresholds and the end-of-test summary may save 20-30%.
+- **Request rate.** On this 16-CPU Docker VM, k6 delivers about 65-70k req/s. Asked for 120k
+  with 10k VUs, it crashed and left a truncated sample file. You can tell k6 is the limit when
+  dropped iterations rise while the server's CPU *falls*. A server at its own limit holds its CPU
+  near 100%.
+- **CPU per request is the fairest number when you can't saturate.** At a fixed rate, server CPU
+  ÷ requests gives µs per request, and that ranks servers even when the load generator runs out
+  first. Measure it at more than one connection count: some runtimes, Node for one, get much
+  more expensive per request with many idle connections.
 - **When k6 is too heavy.** For more than about 50k concurrent users on one machine, use an
   event-driven generator where a user costs a few KB: Gatling, `wrk2`, `oha` or `vegeta`
   (rate-based). Results then aren't like-for-like with a k6 baseline, so re-baseline.

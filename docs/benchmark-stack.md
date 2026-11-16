@@ -16,7 +16,7 @@ no separate k6 box, and nothing installed on the host.
 A submission runs only after a passing security review of its exact committed code. Each run also
 checks, before any load, that the server is sandboxed: it sits on an internal Docker network with no
 internet, LAN or host access, and runs as a non-root user with `no-new-privileges`. Builds still
-download from the internet. See [`reviews/README.md`](reviews/README.md).
+download from the internet. See [`security-reviews.md`](security-reviews.md).
 
 ## Run a benchmark
 
@@ -93,6 +93,10 @@ docker compose -f docker/compose.yaml up -d grafana    # http://localhost:3000 (
 - **Time range:** the time picker shows 1970-01-01 because elapsed time is stored as time since 1970.
   Use absolute ranges or zoom rather than "Last 5 minutes".
 
+To save a screenshot of the dashboard with some runs overlaid, run
+`make screenshots OUT=<name>.png RUNS="<run_id> ..." [MIN=8]`. It writes to `docs/img/`, using
+headless Chromium in a container (the `shots` service).
+
 To re-run a recorded configuration, run its `command` (from the table, or `jq -r .command meta.json`).
 
 ## How it differs from the OP's setup
@@ -111,27 +115,64 @@ To re-run a recorded configuration, run its `command` (from the table, or `jq -r
 
 ## Results so far
 
-From an Apple Silicon Mac on Docker Desktop (arm64 server, Docker VM with 16 CPUs and 11.7 GB, k6 on
-the same machine), so **not comparable to the upstream scores**. `results/` is gitignored, so this
-table is the durable record. `load.js` at 10,000 VUs (60 s ramp, 5 min hold), sandboxed, after the
-test suite passed, recorded 2026-10-13:
+From an Apple Silicon Mac on Docker Desktop: the server is arm64 with 1 core and 2 GB, and k6 runs on
+the same machine. One core here is roughly 2x a droplet core, so these numbers **can't be compared
+with upstream's scores**. Only compare them with each other. `results/` is gitignored, so these
+tables are the durable record. All runs are from 2026-11-16, sandboxed, and each passed the 42-check
+test suite first.
 
-| Submission | p95 | p99 | Failed | Peak server CPU (% of one core) | Peak memory (excluding page cache) |
-|---|---|---|---|---|---|
-| python-fastapi-cknutson12 | 0.54 ms | 1.14 ms | 0% | 22% | 221 MB |
-| ruby-rails-gambitboy | 1.30 ms | 2.45 ms | 0% | 45% | 236 MB |
-| rust-epoll-scooter1337 | 0.48 ms | 0.87 ms | 0% | 10% | 62 MB |
+The four entries are the best upstream entry in each language we track (see
+[`findings.md`](findings.md)):
 
-A `stairs` run against Rust up to 25k VUs gave p95 0.45 ms, p99 1.06 ms, 0% failures, peak 11% of one
-core and 125 MB. No run has come near a server's limit. In this VM, k6's memory caps a full `load.js`
-hold at about 20-22k VUs. See [`LOAD-TESTING-NOTES.md`](LOAD-TESTING-NOTES.md) for the sizing numbers.
+| Language | Entry | Upstream users held |
+|---|---|---:|
+| Rust | `rust-iouring-kensac` | 310k |
+| Go | `go-iouring-huykn` | 276k |
+| Python | `python-pypy-iouring-kiwamizamurai` (PyPy) | 155k |
+| TypeScript/JS | `node-uwebsockets-zahidcakici` (Node + uWebSockets) | 97k |
 
-The Rust row was measured on the PR version of `rust-epoll-scooter1337`. Upstream has since merged a
-newer version, so its review is stale and needs redoing before it runs again.
+**Request-rate ramp** (`rate`, 0 → 80k req/s over 4 minutes, `MAX_VUS=3000`). This is the test that
+separates them:
+
+| Entry | CPU per request at 20k req/s | Clean up to (p95 < 10 ms, nothing dropped) | Peak req/s | What stopped it |
+|---|---:|---:|---:|---|
+| Rust | 12 µs | ~68k req/s | 74k | Probably k6: server CPU *fell* as drops rose |
+| Go | 22 µs | ~55k req/s | 72k | k6 at the end, as with Rust |
+| Python (PyPy) | 27 µs | ~20k req/s | 48k | Server CPU near 90%; latency rises from 25k |
+| TypeScript/JS (Node) | 30 µs | ~17k req/s | 50k | Server CPU near 100%; p99 400-900 ms past 40k |
+
+![Request-rate ramp, four entries overlaid](img/local-rate-ramp.png)
+
+**Upstream's `load.js` at 20,000 users** (60 s ramp, 5 min hold, about 2.1k req/s). Nothing comes
+close to a limit here, so this only shows each entry's cost at a fixed load:
+
+| Entry | p95 | p99 | Failed | Mean server CPU | Peak memory |
+|---|---:|---:|---:|---:|---:|
+| Rust | 1.36 ms | 2.22 ms | 0% | 5.5% | 114 MB |
+| Go | 0.37 ms | 1.14 ms | 0% | 7.5% | 129 MB |
+| Python (PyPy) | 0.57 ms | 6.78 ms | 0% | 11.4% | 179 MB |
+| TypeScript/JS (Node) | 0.40 ms | 1.90 ms | 0% | 11.5% | 174 MB |
+
+![load.js at 20k users, four entries overlaid](img/local-load-20k.png)
+
+**Take-aways**
+- **CPU per request ranks them the same way upstream's scores do.** Rust 12 µs, Go 22 µs, Python
+  27 µs, Node 30 µs. Rust needs about half of Go's CPU per request.
+- **Node's cost per request triples with many open connections.** Upstream, with 97k connections
+  open, Node spends 90 µs per request at 92% CPU. Here, with at most 3,000 connections, it spends
+  30 µs. Rust (12 → 25 µs) and Python (27 → 49 µs) only roughly double, about what the slower
+  upstream core explains. Node's limit is the cost of each connection, not raw request speed. This
+  is an inference from two different machines.
+- **20k users is too few to tell these servers apart on this machine.** All four stay under 12% CPU.
+  Use the `rate` ramp, or more users once k6 has more memory.
+
+Older runs, from 2026-10-13 at 10k users: `python-fastapi-cknutson12` p95 0.54 ms at 22% CPU,
+`ruby-rails-gambitboy` 1.30 ms at 45%, `rust-epoll-scooter1337` 0.48 ms at 10%.
 
 ## Not done yet
 
-- Rust at 50k VUs. It needs about 18 GB for k6 and the server: raise Docker Desktop's memory, or use
-  one of the options in the notes.
+- Saturate Rust and Go. k6 tops out around 65-70k req/s on this machine (see
+  [`load-testing-notes.md`](load-testing-notes.md)). A second k6 container, or a lighter load
+  generator, would find their real ceiling.
 - The `spike` scenario has never been run.
 - Upstream's scoring search isn't automated (see above).

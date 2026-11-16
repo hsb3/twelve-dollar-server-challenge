@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds a submission into the server container, runs test/test.sh against it, then a k6 scenario against
 # a fresh restart while sampling the server's CPU and memory. Each run lands in results/<run-id>/ and is
-# ingested into results/runs.db for Grafana. See docker/README.md.
+# ingested into results/runs.db for Grafana. See docs/benchmark-stack.md.
 #
 #   bash docker/bench.sh <submission-folder> [VUS]
 #
@@ -19,9 +19,11 @@ RUN="$(date -u +%Y%m%d-%H%M%S)_${SUBMISSION}_${SCENARIO}"
 OUT="$ROOT/results/$RUN"
 dc() { docker compose -f "$ROOT/docker/compose.yaml" "$@"; }
 
+healthy() {
+  dc run --rm -T tools bash -c 'for _ in $(seq 60); do curl -sf http://server/health >/dev/null && exit 0; sleep 1; done; exit 1'
+}
 wait_healthy() {
-  dc run --rm -T tools bash -c 'for _ in $(seq 60); do curl -sf http://server/health >/dev/null && exit 0; sleep 1; done; exit 1' \
-    || { echo "no healthy /health after 60 s"; dc logs server | tail -30; exit 1; }
+  healthy || { echo "no healthy /health after 60 s"; dc logs server | tail -30; exit 1; }
 }
 STATS=""
 finish() {
@@ -30,7 +32,7 @@ finish() {
   [ -z "$STATS" ] || docker wait "$STATS" >/dev/null 2>&1 || true
 }
 
-# Only run code that passed a security review of exactly this tree (docker/reviews/README.md).
+# Only run code that passed a security review of exactly this tree (docs/security-reviews.md).
 REVIEW="$ROOT/docker/reviews/$SUBMISSION.md"
 field() { sed -n "s/^$1: *//p" "$REVIEW" | head -1; }
 die() { echo "refusing to run $SUBMISSION: $*"; exit 1; }
@@ -53,7 +55,9 @@ dc up -d server && wait_healthy
 if [ "${SKIP_TEST:-0}" != 1 ]; then
   echo "== test"
   dc run --rm -T tools bash test/test.sh http://server | tee "$OUT/test.txt"
-  dc restart server && wait_healthy   # the tests write rows; load-test a fresh copy
+  # The tests write rows; load-test a fresh copy. Retry once: io_uring setup can fail with a transient
+  # ENOMEM when big rings are allocated right after the old process exits.
+  dc restart server && { healthy || { echo "== restart failed, retrying once"; dc restart server && wait_healthy; }; }
 fi
 
 # The server must have no route out and no reachable internet before it takes load.
