@@ -2,7 +2,6 @@ package challenge;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.zaxxer.hikari.HikariDataSource;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -18,7 +17,6 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
-import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -39,7 +37,7 @@ class ApiTest {
 
     @LocalServerPort int port;
     @Autowired JsonMapper json;
-    @Autowired DataSource dataSource;
+    @Autowired PostRepository posts;
 
     @DynamicPropertySource
     static void configuration(DynamicPropertyRegistry properties) {
@@ -226,30 +224,68 @@ class ApiTest {
 
     @Test
     void enablesRequiredDatabasePragmas() throws Exception {
-        try (var first = dataSource.getConnection();
-                var second = dataSource.getConnection();
-                var third = dataSource.getConnection();
-                var fourth = dataSource.getConnection()) {
-            for (var connection : List.of(first, second, third, fourth)) {
-                for (var pragma :
-                        java.util.Map.of(
-                                        "journal_mode",
-                                        "wal",
-                                        "synchronous",
-                                        "1",
-                                        "foreign_keys",
-                                        "1",
-                                        "busy_timeout",
-                                        "5000")
-                                .entrySet()) {
-                    try (var statement = connection.createStatement();
-                            var rows = statement.executeQuery("PRAGMA " + pragma.getKey())) {
-                        assertTrue(rows.next());
-                        assertEquals(pragma.getValue(), rows.getString(1), pragma.getKey());
-                    }
+        assertEquals(4, posts.connections().size());
+        for (var connection : posts.connections()) {
+            for (var pragma :
+                    java.util.Map.of(
+                                    "journal_mode",
+                                    "wal",
+                                    "synchronous",
+                                    "1",
+                                    "foreign_keys",
+                                    "1",
+                                    "busy_timeout",
+                                    "5000")
+                            .entrySet()) {
+                try (var statement = connection.createStatement();
+                        var rows = statement.executeQuery("PRAGMA " + pragma.getKey())) {
+                    assertTrue(rows.next());
+                    assertEquals(pragma.getValue(), rows.getString(1), pragma.getKey());
                 }
             }
         }
+    }
+
+    @Test
+    void readsBackEscapedAndUnicodeTextInPostAndFeed() throws Exception {
+        String body = "\"quoted\" \\ back\tslash </script> line\nbreak é 😀 \u0001";
+        HttpResponse<String> created =
+                request(
+                        "POST",
+                        "/posts",
+                        json.writeValueAsString(java.util.Map.of("body", body)),
+                        token());
+        assertEquals(201, created.statusCode());
+        var post = json.readTree(created.body()).path("post");
+        // Reads name the author from the database, creation from the token.
+        String expected =
+                "{\"id\":"
+                        + post.path("id").asLong()
+                        + ",\"body\":"
+                        + json.writeValueAsString(body)
+                        + ",\"created_at\":\""
+                        + post.path("created_at").asString()
+                        + "\",\"author\":\"database-name\",\"like_count\":0}";
+        HttpResponse<String> read =
+                request("GET", "/posts/" + post.path("id").asLong(), null, null);
+        assertEquals(200, read.statusCode());
+        assertEquals(json.readTree("{\"post\":" + expected + "}"), json.readTree(read.body()));
+        HttpResponse<String> feed = request("GET", "/feed", null, null);
+        assertEquals(200, feed.statusCode());
+        assertEquals(json.readTree(expected), json.readTree(feed.body()).path("posts").get(0));
+    }
+
+    @Test
+    void onlyTheWriterConnectionCanWrite() throws Exception {
+        List<String> queryOnly = new ArrayList<>();
+        for (var connection : posts.connections()) {
+            try (var statement = connection.createStatement();
+                    var rows = statement.executeQuery("PRAGMA query_only")) {
+                assertTrue(rows.next());
+                queryOnly.add(rows.getString(1));
+            }
+        }
+        assertEquals(List.of("1", "1", "1", "0"), queryOnly);
     }
 
     @Test
@@ -289,7 +325,7 @@ class ApiTest {
     @Test
     @DirtiesContext
     void unhealthyDatabaseReturns503() throws Exception {
-        ((HikariDataSource) dataSource).close();
+        posts.close();
         expect(
                 request("GET", "/health", null, null),
                 503,

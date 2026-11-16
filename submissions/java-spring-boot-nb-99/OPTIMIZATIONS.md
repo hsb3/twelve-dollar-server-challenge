@@ -1,37 +1,26 @@
 # Possible future optimizations
 
-Keep the first draft as a correctness baseline. Measure changes on the challenge's
-one-vCPU, 2 GiB VM before retaining them. The Compose limits do not reproduce the
-whole benchmark machine or its remote load generator.
+None of these is measured yet. Check each change with the 42-check suite on a
+fresh database, then with `bench/load.js` at a fixed user count and in a full
+search. Compare CPU per request, p95, p99, and errors over repeated runs, and read
+a profile before naming a bottleneck. Do not keep a faster run that skips work or
+returns errors.
 
-## Measure before changing settings
-
-Run the repository's correctness suite against a fresh database before each
-candidate. Then use `bench/load.js` from a separate load-generator machine with
-the specified warm-up, search, and five-minute confirmation. Record the commit,
-JDK, JVM flags, SQLite pragmas, connection and thread counts, workload, user count,
-run count, latency percentiles, error rate, CPU, and total memory. Compare repeated
-runs and report their spread. Inspect profiles and counters before naming a
-bottleneck. Do not accept faster runs that skip work or return errors.
-
-## Candidates
+Profiles of the WebFlux version put about 90% of Java CPU in Spring WebFlux,
+Reactor, and Netty, so the framework rows come first.
 
 | Change | What to measure | Cost or risk |
 | --- | --- | --- |
-| Change the JDBC pool size | Connection wait time, writer contention, latency, and memory | More connections do not create more SQLite writers and each connection has a page cache. |
-| Tune Tomcat's request threads or enable Java virtual threads | CPU, thread memory, blocked time, throughput, and tail latency | Extra concurrency can increase the SQLite wait queue on one CPU. |
-| Tune SQLite page cache and `mmap_size` | Read I/O, resident memory, page faults, and feed latency | The JVM, OS, and Nginx also need part of the 2 GiB budget. |
-| Tune WAL checkpoints | WAL growth, checkpoint time, and write tail latency | Delayed checkpoints need more disk space and can cause later latency spikes. |
-| Reuse prepared statements per connection | SQL preparation CPU and allocation rate | Statement lifetime and concurrent ownership need care. Cache plans, never results. |
-| Separate readers from a serialized writer connection | Busy failures, queue time, and read latency during writes | Adds scheduling and connection ownership code. Each response must wait for commit. |
-| Group several writes into a transaction | Commit cost, queue delay, and p99 write latency | Adds cancellation and failure handling. Respond only after the shared transaction commits. |
-| Compare other equivalent feed and like-count queries | Query plans and elapsed SQL time on fresh and grown data | Cannot add indexes or store derived counts. Every request must read current SQLite data. |
-| Combine the like's existence check and insert into one statement | SQL call overhead and write latency | Must distinguish a missing post from a repeated like and preserve 404, 200, and 201 responses. |
-| Raise Tomcat's maximum requests per keep-alive connection | Upstream reconnects and CPU | The default closes a connection after 100 requests. Compare settings with Nginx before removing the limit. |
-| Tune JVM heap and garbage collection | GC pauses, allocation rate, RSS, and OOM risk | A larger heap can take memory from SQLite and the OS. The heap limit does not bound native memory. |
-| Reduce JSON or authentication allocation | Allocation profiles and CPU time after SQL bottlenecks are ruled out | Must preserve exact JSON ordering, escaping, expiration checks, and per-request signature verification. |
-| Serve directly without Nginx | Whole-machine CPU and behavior with about 15,000 open keep-alive connections | Must bind the required host and port and handle the full connection count itself. |
+| Functional WebFlux routes (`RouterFunction`) instead of annotated controllers | CPU per request in handler mapping, reflection, and argument resolution | Error handling and status codes must stay identical. |
+| Serve the five routes on Reactor Netty or Netty without Spring's web layer | CPU per request and allocation rate | More HTTP code to own: routing, header parsing, keep-alive, and error responses. |
+| Young-generation size and GC settings | Young pause times, which averaged 79 ms under load, and allocation rate | A larger young generation takes memory from SQLite's page cache and the OS. |
+| Number of reader connections and SQLite threads | Read queue time, CPU, and tail latency | Extra threads cannot add CPU on one vCPU, and each connection has its own page cache. |
+| SQLite page cache and `mmap_size` | Read I/O, page faults, resident memory, and feed latency | The JVM and the OS also need part of the 2 GiB. |
+| WAL checkpoints outside the writer's request path | WAL growth, checkpoint time, and write tail latency | Delayed checkpoints need more disk space and can cause later latency spikes. |
+| Group several writes into one transaction | Commit cost, queue delay, and p99 write latency | Writes are about 8% of requests. Every response must still wait for its commit. |
+| Combine the like's existence check and insert into one statement | SQL calls and write latency | Must still tell a missing post from a repeated like: 404, 200, and 201. |
+| Fewer allocations in authentication and the remaining JSON responses | Allocation profile and CPU for likes, new posts, and errors | Must keep exact key order, escaping, `exp` checks, and per-request signature verification. |
 
-WAL with `synchronous=NORMAL` or stronger is non-negotiable. Do not add response
-caches, query-result caches, remembered JWT verifications, in-memory table copies,
-external services, schema changes, benchmark detection, or weaker durability.
+WAL with `synchronous=NORMAL` or stronger stays. Response caches, query-result
+caches, remembered JWT verifications, in-memory table copies, external services,
+schema changes, benchmark detection, and weaker durability are out.

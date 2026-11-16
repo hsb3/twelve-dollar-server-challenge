@@ -1,0 +1,449 @@
+#include "store.h"
+#include "td_btree.h"
+#include <errno.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <stdio.h>
+#include <sys/prctl.h>
+#include <sys/resource.h>
+#include <time.h>
+#include <unistd.h>
+
+int td_opt_ckpt = 250;    // wal_autocheckpoint pages (--ckpt=N): smaller, more frequent checkpoint stalls
+int td_opt_ckptproc = 1; // --ckptproc=0: inline autocheckpoint, EXCLUSIVE locking
+int td_opt_pcache = 1;   // --pcache=0|1: our page cache plugin, or SQLite's
+int td_opt_walbuf = 1;   // --walbuf=0|1: one pwrite per commit for the WAL, or SQLite's two per frame
+int td_opt_warm = 1, td_opt_ckdrop = 1;   // --warm=0|1 --ckdrop=0|1
+int td_opt_jsl = 0;   // --jsl=N: journal_size_limit bytes (-1: unlimited)
+int td_opt_cachekb = 256000, td_opt_cknice = 0, td_opt_lock = 1;   // --cache=KB --cknice=N --lock=0|1
+long long td_opt_mmap = 0; // mmap_size bytes (--mmap=N); 0: page cache reads beat per-page mmap objects
+
+#define POST_COLS "SELECT p.id, p.body, p.created_at, u.username, " \
+    "(SELECT count(*) FROM likes l WHERE l.post_id = p.id) FROM posts p JOIN users u ON u.id = p.user_id "
+
+int td_opt_btree = 1;     // --btree=0: SQL statements for every read
+
+@implementation TDStore {
+    sqlite3 *db;
+    bool bt;
+    sqlite3_stmt *sFeedIds, *sFeedRange, *sLikeRange;
+    TDBuf rows;
+    sqlite3_stmt *sHealth, *sFeed, *sPost, *sCreate, *sLike, *sExists, *sBegin, *sCommit, *sRollback;
+}
+
+static sqlite3_stmt *prep(sqlite3 *db, const char *sql) {
+    sqlite3_stmt *s = NULL;
+    if (sqlite3_prepare_v3(db, sql, -1, SQLITE_PREPARE_PERSISTENT, &s, NULL) != SQLITE_OK) {
+        fprintf(stderr, "prepare failed: %s: %s\n", sql, sqlite3_errmsg(db));
+        exit(1);
+    }
+    return s;
+}
+
+// Feed like tally: pos[post_id - lo] is the post's slot in cnt, or -1.
+typedef struct { int64_t lo; const int8_t *pos; int64_t *cnt; } TDTally;
+static TDTally tally;
+static void tally_step(sqlite3_context *c, int n, sqlite3_value **v) {
+    (void)n;
+    TDTally *t = sqlite3_user_data(c);
+    uint64_t k = (uint64_t)(sqlite3_value_int64(v[0]) - t->lo);
+    if (k < 256 && t->pos[k] >= 0) t->cnt[t->pos[k]]++;
+}
+static void tally_final(sqlite3_context *c) { sqlite3_result_null(c); }
+
+static int wal_frames_hook(void *p, sqlite3 *d, const char *name, int frames) {
+    (void)d; (void)name;
+    ((TDStore *)p)->walFrames = frames;
+    return SQLITE_OK;
+}
+
+static void exec(sqlite3 *db, const char *sql) {
+    char *err = NULL;
+    if (sqlite3_exec(db, sql, NULL, NULL, &err) != SQLITE_OK) {
+        fprintf(stderr, "%s: %s\n", sql, err ? err : "?");
+        exit(1);
+    }
+}
+
+- (instancetype)initWithPath:(const char *)path {
+    pthread_mutex_init(&lock, NULL);
+    if (td_opt_pcache) td_pcache_install();
+    if (td_opt_walbuf) td_vfs_install();
+    if (sqlite3_open_v2(path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_NOMUTEX, NULL) != SQLITE_OK) {
+        fprintf(stderr, "open %s: %s\n", path, db ? sqlite3_errmsg(db) : "?");
+        exit(1);
+    }
+    // Inline mode: EXCLUSIVE before the first read, so the WAL index lives in heap
+    // memory and transactions take no file locks. Checkpointer mode: NORMAL
+    // locking (shared-memory WAL index), since a second process checkpoints.
+    if (!td_opt_ckptproc) exec(db, "PRAGMA locking_mode=EXCLUSIVE");
+    exec(db, "PRAGMA journal_mode=WAL");
+    exec(db, "PRAGMA synchronous=NORMAL");
+    char mm[64];
+    snprintf(mm, sizeof mm, "PRAGMA mmap_size=%lld", td_opt_mmap);
+    exec(db, mm);
+    char cs[64];
+    snprintf(cs, sizeof cs, "PRAGMA cache_size=-%d", td_opt_cachekb);
+    exec(db, cs);
+    exec(db, "PRAGMA temp_store=MEMORY");
+    if (td_opt_jsl >= 0) {
+        // The WAL is overwritten from the start after each rewind. Frames aren't page-aligned, so overwriting a file page
+        // the kernel has evicted makes it read the old page from disk first, on this thread. With a limit SQLite truncates
+        // the file at the rewind's first commit: later frames append to fresh pages, and the old ones are freed at once.
+        char jl[64];
+        snprintf(jl, sizeof jl, "PRAGMA journal_size_limit=%d", td_opt_jsl);
+        exec(db, jl);
+    }
+    if (td_opt_ckptproc) sqlite3_wal_hook(db, wal_frames_hook, self);   // replaces autocheckpoint
+    else sqlite3_wal_autocheckpoint(db, td_opt_ckpt);
+    exec(db, "SELECT count(*) FROM sqlite_schema"); // takes the exclusive lock now
+    sHealth = prep(db, "SELECT 1");
+    sFeed = prep(db, POST_COLS "ORDER BY p.created_at DESC, p.id DESC LIMIT 20");
+    sPost = prep(db, POST_COLS "WHERE p.id = ?1");
+    sFeedIds = prep(db, "SELECT id FROM posts ORDER BY created_at DESC, id DESC LIMIT 20");
+    sFeedRange = prep(db, "SELECT p.id, p.body, p.created_at, u.username FROM posts p "
+                          "JOIN users u ON u.id = p.user_id WHERE p.id BETWEEN ?1 AND ?2");
+    // td_tally(post_id) counts the feed's likes inside one sqlite3_step instead of
+    // returning every likes_post_id_idx entry as a row (~40 ns per row saved).
+    sqlite3_create_function_v2(db, "td_tally", 1, SQLITE_UTF8 | SQLITE_DIRECTONLY, &tally, NULL,
+                               tally_step, tally_final, NULL);
+    sLikeRange = prep(db, "SELECT td_tally(post_id) FROM likes WHERE post_id BETWEEN ?1 AND ?2");
+    // No RETURNING: it buffers rows in an ephemeral table (a page cache built and
+    // torn down per insert). created_at is written in the schema default's format.
+    if (td_opt_warm) {
+        // Writes land on random leaves of these indexes, and authors on random rows of users. Reading them now, while
+        // memory is plentiful, puts them in the page cache: later the loop would stall reading them from disk one by one
+        // just when the kernel has dropped its file cache.
+        sqlite3_exec(db, "SELECT sum(user_id) FROM likes INDEXED BY sqlite_autoindex_likes_1", NULL, NULL, NULL);
+        sqlite3_exec(db, "SELECT sum(user_id) FROM posts INDEXED BY posts_user_id_idx", NULL, NULL, NULL);
+        sqlite3_exec(db, "SELECT sum(length(username)) FROM users", NULL, NULL, NULL);
+    }
+    sCreate = prep(db, "INSERT INTO posts (user_id, body, created_at) VALUES (?1, ?2, ?3)");
+    sLike = prep(db, "INSERT INTO likes (user_id, post_id, created_at) SELECT ?1, ?2, ?3 "
+                     "WHERE EXISTS (SELECT 1 FROM posts WHERE id = ?2) ON CONFLICT DO NOTHING");
+    sExists = prep(db, "SELECT 1 FROM posts WHERE id = ?1");
+    bt = td_opt_btree && td_bt_init(db);
+    if (!bt) fprintf(stderr, "B-tree reads off: SQL for every read\n");
+    sBegin = prep(db, "BEGIN");
+    sCommit = prep(db, "COMMIT");
+    sRollback = prep(db, "ROLLBACK");
+    return self;
+}
+
+- (int)cacheStat:(int)which {
+    int cur = 0, hi = 0;
+    sqlite3_db_status(db, which ? SQLITE_DBSTATUS_CACHE_MISS : SQLITE_DBSTATUS_CACHE_USED, &cur, &hi, 0);
+    return which ? cur : cur / 1024;
+}
+
+- (void)useInlineCheckpoints {
+    sqlite3_wal_autocheckpoint(db, td_opt_ckpt);
+}
+
+// UTC "YYYY-MM-DDTHH:MM:SS.mmmZ" (24 bytes, no NUL), as strftime('%Y-%m-%dT%H:%M:%fZ','now').
+static void iso_now(char *o) {
+    static time_t lastSec = -1;
+    static char head[20];               // "YYYY-MM-DDTHH:MM:SS"
+    struct timespec t;
+    clock_gettime(CLOCK_REALTIME, &t);
+    if (t.tv_sec != lastSec) {
+        struct tm g;
+        gmtime_r(&t.tv_sec, &g);
+        char tmp[32];
+        snprintf(tmp, sizeof tmp, "%04d-%02d-%02dT%02d:%02d:%02d", g.tm_year + 1900, g.tm_mon + 1, g.tm_mday,
+                 g.tm_hour, g.tm_min, g.tm_sec);
+        memcpy(head, tmp, 19);
+        lastSec = t.tv_sec;
+    }
+    memcpy(o, head, 19);
+    unsigned ms = (unsigned)(t.tv_nsec / 1000000);
+    o[19] = '.';
+    o[20] = (char)('0' + ms / 100);
+    o[21] = (char)('0' + ms / 10 % 10);
+    o[22] = (char)('0' + ms % 10);
+    o[23] = 'Z';
+}
+
+TD_INLINE bool run1(sqlite3_stmt *s) {
+    int rc = sqlite3_step(s);
+    sqlite3_reset(s);
+    return rc == SQLITE_DONE || rc == SQLITE_ROW;
+}
+
+- (bool)begin { return run1(sBegin); }
+- (bool)commit { td_bt_end(); return run1(sCommit); }
+- (void)rollback { td_bt_end(); if (!sqlite3_get_autocommit(db)) run1(sRollback); }
+
+static void put_post(TDBuf *b, sqlite3_stmt *s) {
+    td_buf_lit(b, "{\"id\":");
+    td_buf_int(b, sqlite3_column_int64(s, 0));
+    td_buf_lit(b, ",\"body\":\"");
+    const char *body = (const char *)sqlite3_column_text(s, 1);
+    td_buf_json_str(b, body, (uint32_t)sqlite3_column_bytes(s, 1));
+    td_buf_lit(b, "\",\"created_at\":\"");
+    const char *ca = (const char *)sqlite3_column_text(s, 2);
+    td_buf_put(b, ca, (uint32_t)sqlite3_column_bytes(s, 2));
+    td_buf_lit(b, "\",\"author\":\"");
+    const char *au = (const char *)sqlite3_column_text(s, 3);
+    td_buf_json_str(b, au, (uint32_t)sqlite3_column_bytes(s, 3));
+    td_buf_lit(b, "\",\"like_count\":");
+    td_buf_int(b, sqlite3_column_int64(s, 4));
+    td_buf_ch(b, '}');
+}
+
+static int fail(TDBuf *b) {
+    b->len = 0;
+    td_buf_lit(b, "{\"error\":\"internal server error\"}");
+    return 500;
+}
+
+- (int)health:(TDBuf *)b uptime:(int64_t)up {
+    int rc = sqlite3_step(sHealth);
+    sqlite3_reset(sHealth);
+    if (rc == SQLITE_ROW) {
+        td_buf_lit(b, "{\"status\":\"ok\",\"db\":\"ok\",\"uptime_s\":");
+        td_buf_int(b, up);
+        td_buf_ch(b, '}');
+        return 200;
+    }
+    td_buf_lit(b, "{\"status\":\"degraded\",\"db\":\"unreachable\",\"error\":\"");
+    const char *m = sqlite3_errmsg(db);
+    td_buf_json_str(b, m, (uint32_t)strlen(m));
+    td_buf_lit(b, "\"}");
+    return 503;
+}
+
+static void put_view(TDBuf *b, const TDPostView *v) {
+    td_buf_lit(b, "{\"id\":");
+    td_buf_int(b, v->id);
+    td_buf_lit(b, ",\"body\":\"");
+    td_buf_json_str(b, v->body, v->bodyLen);
+    td_buf_lit(b, "\",\"created_at\":\"");
+    td_buf_put(b, v->ca, v->caLen);
+    td_buf_lit(b, "\",\"author\":\"");
+    td_buf_json_str(b, v->au, v->auLen);
+    td_buf_lit(b, "\",\"like_count\":");
+    td_buf_int(b, v->likes);
+    td_buf_ch(b, '}');
+}
+typedef struct { TDBuf *b; uint32_t start; int n; } FeedSink;
+static void feed_sink(void *ctx, const TDPostView *v) {
+    FeedSink *f = ctx;
+    if (f->n++) td_buf_ch(f->b, ',');
+    put_view(f->b, v);
+}
+static void post_sink(void *ctx, const TDPostView *v) {
+    TDBuf *b = ctx;
+    td_buf_lit(b, "{\"post\":");
+    put_view(b, v);
+    td_buf_ch(b, '}');
+}
+
+// The general feed query: one correlated count per post.
+- (int)feedGeneral:(TDBuf *)b TD_DIRECT {
+    sqlite3_stmt *s = sFeed;
+    td_buf_lit(b, "{\"posts\":[");
+    int rc, n = 0;
+    while ((rc = sqlite3_step(s)) == SQLITE_ROW) {
+        if (n++) td_buf_ch(b, ',');
+        put_post(b, s);
+    }
+    sqlite3_reset(s);
+    if (rc != SQLITE_DONE) return fail(b);
+    td_buf_lit(b, "]}");
+    return 200;
+}
+
+#define FEED_SPAN 256
+typedef struct { uint32_t body, bodyLen, ca, caLen, au, auLen; int64_t likes; bool seen; } FeedRow;
+
+// Finds the 20 newest ids from the (created_at, id) index. When they sit in a
+// narrow id range, fetches their rows with one rowid range scan and their like
+// counts by tallying one likes_post_id_idx range scan, then restores the index order.
+// All three statements run in the batch's transaction, so they see one snapshot.
+- (int)feed:(TDBuf *)b {
+    if (bt) {
+        FeedSink f = { b, b->len, 0 };
+        td_buf_lit(b, "{\"posts\":[");
+        if (td_bt_feed(feed_sink, &f) >= 0) { td_buf_lit(b, "]}"); return 200; }
+        b->len = f.start;
+    }
+    return [self feedSQL:b];
+}
+
+- (int)feedSQL:(TDBuf *)b TD_DIRECT {
+    int64_t ids[20];
+    int n = 0, rc;
+    sqlite3_stmt *s = sFeedIds;
+    while (n < 20 && (rc = sqlite3_step(s)) == SQLITE_ROW) ids[n++] = sqlite3_column_int64(s, 0);
+    sqlite3_reset(s);
+    if (n == 0) { td_buf_lit(b, "{\"posts\":[]}"); return 200; }
+    int64_t lo = ids[0], hi = ids[0];
+    for (int i = 1; i < n; i++) { if (ids[i] < lo) lo = ids[i]; if (ids[i] > hi) hi = ids[i]; }
+    if (hi - lo >= FEED_SPAN) return [self feedGeneral:b];
+    int8_t pos[FEED_SPAN];
+    memset(pos, -1, sizeof pos);
+    for (int i = 0; i < n; i++) pos[ids[i] - lo] = (int8_t)i;
+    FeedRow row[20];
+    memset(row, 0, sizeof row);
+    rows.len = 0;
+    s = sFeedRange;
+    sqlite3_bind_int64(s, 1, lo);
+    sqlite3_bind_int64(s, 2, hi);
+    while ((rc = sqlite3_step(s)) == SQLITE_ROW) {
+        int64_t id = sqlite3_column_int64(s, 0);
+        int k = pos[id - lo];
+        if (k < 0) continue;
+        FeedRow *r = &row[k];
+        r->seen = true;
+        r->bodyLen = (uint32_t)sqlite3_column_bytes(s, 1);
+        r->body = rows.len; td_buf_put(&rows, sqlite3_column_text(s, 1), r->bodyLen);
+        r->caLen = (uint32_t)sqlite3_column_bytes(s, 2);
+        r->ca = rows.len; td_buf_put(&rows, sqlite3_column_text(s, 2), r->caLen);
+        r->auLen = (uint32_t)sqlite3_column_bytes(s, 3);
+        r->au = rows.len; td_buf_put(&rows, sqlite3_column_text(s, 3), r->auLen);
+    }
+    sqlite3_reset(s);
+    if (rc != SQLITE_DONE) return fail(b);
+    int64_t cnt[20] = {0};
+    tally.lo = lo;
+    tally.pos = pos;
+    tally.cnt = cnt;
+    s = sLikeRange;
+    sqlite3_bind_int64(s, 1, lo);
+    sqlite3_bind_int64(s, 2, hi);
+    while ((rc = sqlite3_step(s)) == SQLITE_ROW) {}
+    sqlite3_reset(s);
+    if (rc != SQLITE_DONE) return fail(b);
+    for (int i = 0; i < n; i++) row[i].likes = cnt[i];
+    td_buf_lit(b, "{\"posts\":[");
+    bool first = true;
+    for (int i = 0; i < n; i++) {
+        FeedRow *r = &row[i];
+        if (!r->seen) continue;
+        if (!first) td_buf_ch(b, ',');
+        first = false;
+        td_buf_lit(b, "{\"id\":");
+        td_buf_int(b, ids[i]);
+        td_buf_lit(b, ",\"body\":\"");
+        td_buf_json_str(b, rows.p + r->body, r->bodyLen);
+        td_buf_lit(b, "\",\"created_at\":\"");
+        td_buf_put(b, rows.p + r->ca, r->caLen);
+        td_buf_lit(b, "\",\"author\":\"");
+        td_buf_json_str(b, rows.p + r->au, r->auLen);
+        td_buf_lit(b, "\",\"like_count\":");
+        td_buf_int(b, r->likes);
+        td_buf_ch(b, '}');
+    }
+    td_buf_lit(b, "]}");
+    return 200;
+}
+
+- (int)post:(int64_t)pid into:(TDBuf *)b {
+    if (bt) {
+        uint32_t start = b->len;
+        int r = td_bt_post(pid, post_sink, b);
+        if (r == 1) return 200;
+        b->len = start;
+        if (r == 0) { td_buf_lit(b, "{\"error\":\"post not found\"}"); return 404; }
+    }
+    sqlite3_stmt *s = sPost;
+    sqlite3_bind_int64(s, 1, pid);
+    int rc = sqlite3_step(s);
+    if (rc == SQLITE_ROW) {
+        td_buf_lit(b, "{\"post\":");
+        put_post(b, s);
+        td_buf_ch(b, '}');
+        sqlite3_reset(s);
+        return 200;
+    }
+    sqlite3_reset(s);
+    if (rc != SQLITE_DONE) return fail(b);
+    td_buf_lit(b, "{\"error\":\"post not found\"}");
+    return 404;
+}
+
+- (int)create:(int64_t)uid name:(const char *)name length:(uint32_t)nl
+          body:(const char *)body length:(uint32_t)bl into:(TDBuf *)b {
+    sqlite3_stmt *s = sCreate;
+    char ts[24];
+    iso_now(ts);
+    sqlite3_bind_int64(s, 1, uid);
+    sqlite3_bind_text(s, 2, body, (int)bl, SQLITE_STATIC);
+    sqlite3_bind_text(s, 3, ts, 24, SQLITE_STATIC);
+    int rc = sqlite3_step(s);
+    sqlite3_reset(s);
+    if (rc != SQLITE_DONE) return fail(b);
+    td_buf_lit(b, "{\"post\":{\"id\":");
+    td_buf_int(b, sqlite3_last_insert_rowid(db));
+    td_buf_lit(b, ",\"body\":\"");
+    td_buf_json_str(b, body, bl);
+    td_buf_lit(b, "\",\"created_at\":\"");
+    td_buf_put(b, ts, 24);
+    td_buf_lit(b, "\",\"author\":\"");
+    td_buf_json_str(b, name, nl);
+    td_buf_lit(b, "\",\"like_count\":0}}");
+    return 201;
+}
+
+- (int)like:(int64_t)uid post:(int64_t)pid into:(TDBuf *)b {
+    sqlite3_stmt *s = sLike;
+    sqlite3_bind_int64(s, 1, uid);
+    sqlite3_bind_int64(s, 2, pid);
+    char ts[24];
+    iso_now(ts);
+    sqlite3_bind_text(s, 3, ts, 24, SQLITE_STATIC);
+    int rc = sqlite3_step(s);
+    sqlite3_reset(s);
+    if (rc != SQLITE_DONE) return fail(b);
+    bool added = sqlite3_changes(db) == 1;
+    if (!added) {
+        s = sExists;
+        sqlite3_bind_int64(s, 1, pid);
+        rc = sqlite3_step(s);
+        sqlite3_reset(s);
+        if (rc == SQLITE_DONE) {
+            td_buf_lit(b, "{\"error\":\"post not found\"}");
+            return 404;
+        }
+        if (rc != SQLITE_ROW) return fail(b);
+    }
+    td_buf_lit(b, "{\"liked\":true,\"already_liked\":");
+    if (added) td_buf_lit(b, "false"); else td_buf_lit(b, "true");
+    td_buf_lit(b, ",\"post_id\":");
+    td_buf_int(b, pid);
+    td_buf_ch(b, '}');
+    return added ? 201 : 200;
+}
+@end
+
+// ---------------------------------------------------------------- checkpointer process
+// Runs in a child forked before SQLite or io_uring exist in the parent. For each
+// request byte it runs one PASSIVE checkpoint on its own connection (NORMAL
+// locking, never writes) and answers {rc, frames in WAL, frames backfilled}.
+void td_ckpt_child(const char *path, int req, int done) {
+    prctl(PR_SET_PDEATHSIG, SIGKILL);
+    if (td_opt_cknice) setpriority(PRIO_PROCESS, 0, td_opt_cknice);
+    sqlite3 *cdb = NULL;
+    int dropFd = -1;
+    char c;
+    for (;;) {
+        ssize_t n = read(req, &c, 1);
+        if (n == 0) _exit(0);
+        if (n < 0) { if (errno == EINTR) continue; _exit(1); }
+        if (!cdb) {
+            if (sqlite3_open_v2(path, &cdb, SQLITE_OPEN_READWRITE | SQLITE_OPEN_NOMUTEX, NULL) != SQLITE_OK) _exit(1);
+            sqlite3_busy_timeout(cdb, 0);
+            exec(cdb, "PRAGMA synchronous=NORMAL");
+            sqlite3_wal_autocheckpoint(cdb, 0);
+            // Kept open: closing any descriptor of a file drops this process's POSIX locks on it.
+            if (td_opt_ckdrop) dropFd = open(path, O_RDONLY | O_CLOEXEC);
+        }
+        int r[3] = { 0, -1, -1 };
+        r[0] = sqlite3_wal_checkpoint_v2(cdb, "main", SQLITE_CHECKPOINT_PASSIVE, &r[1], &r[2]);
+        // The pass synced the pages it wrote. The server's reads come from its page cache, so the kernel's copy has no use,
+        // and left in place it only makes the kernel reclaim, on the one CPU, when memory is short.
+        if (dropFd >= 0) posix_fadvise(dropFd, 0, 0, POSIX_FADV_DONTNEED);
+        if (write(done, r, sizeof r) != (ssize_t)sizeof r) _exit(1);
+    }
+}
